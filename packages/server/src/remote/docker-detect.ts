@@ -7,6 +7,7 @@ export type { DockerContainerInfo } from "@zcode/shared";
 
 const DOCKER_COMMAND = "docker";
 const DOCKER_EXEC_MAX_BUFFER = 8 * 1024 * 1024;
+const DOCKER_DETECT_TIMEOUT_MS = 30_000;
 
 type DockerCommandResolutionOptions = {
   env?: Record<string, string | undefined>;
@@ -115,6 +116,9 @@ async function execDocker(args: string[]): Promise<string> {
         encoding: "utf8",
         maxBuffer: DOCKER_EXEC_MAX_BUFFER,
         windowsHide: true,
+        // version/ps 属于元数据查询，正常情况毫秒级返回；
+        // 不设上限时 daemon 卡顿会让上层部署每一步都无限期挂起（表现为长时间无日志）。
+        timeout: DOCKER_DETECT_TIMEOUT_MS,
       },
       (error, stdout, stderr) => {
         if (error) {
