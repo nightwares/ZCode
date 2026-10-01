@@ -45,6 +45,8 @@ export class DockerBackend implements IRemoteBackend {
   private readonly dockerCommand = resolveDockerCommand();
   private readonly options: DockerConnectOptions;
   private resolvedInfoPromise: Promise<ResolvedDockerInfo> | null = null;
+  private containerNamePromise: Promise<string> | null = null;
+  private availabilityPromise: Promise<void> | null = null;
 
   constructor(options: DockerConnectOptions) {
     this.options = options;
@@ -241,10 +243,40 @@ export class DockerBackend implements IRemoteBackend {
   }
 
   private async ensureAvailable(): Promise<void> {
-    const available = await isDockerAvailable();
-    if (!available) {
-      throw new Error("当前系统未检测到可用的 Docker 环境");
+    // 每次操作都跑一次 `docker version` 会放大 daemon 抖动；
+    // 成功结果按 backend 实例缓存，失败不缓存（daemon 可能稍后才可用）。
+    if (!this.availabilityPromise) {
+      const pending = isDockerAvailable().then((available) => {
+        if (!available) {
+          throw new Error("当前系统未检测到可用的 Docker 环境");
+        }
+      });
+      pending.catch(() => {
+        if (this.availabilityPromise === pending) {
+          this.availabilityPromise = null;
+        }
+      });
+      this.availabilityPromise = pending;
     }
+
+    return this.availabilityPromise;
+  }
+
+  private resolveContainerName(): Promise<string> {
+    // `docker ps -a` 在容器较多的机器上可能秒级甚至分钟级，
+    // 而 execDirect（exists/readFile 等探针）此前每次都重新解析容器。
+    // 成功结果按 backend 实例缓存；失败不缓存，devcontainer 启动中的重试仍生效。
+    if (!this.containerNamePromise) {
+      const pending = this.resolveContainer().then((container) => container.name);
+      pending.catch(() => {
+        if (this.containerNamePromise === pending) {
+          this.containerNamePromise = null;
+        }
+      });
+      this.containerNamePromise = pending;
+    }
+
+    return this.containerNamePromise;
   }
 
   private async resolveInfo(): Promise<ResolvedDockerInfo> {
@@ -253,13 +285,13 @@ export class DockerBackend implements IRemoteBackend {
     }
 
     this.resolvedInfoPromise = (async () => {
-      const container = await this.resolveContainer();
+      const containerName = await this.resolveContainerName();
       const homeDir = normalizeDockerOutput(
         await this.execDirect(["sh", "-lc", "printf %s ~"]),
       ).trim();
 
       return {
-        containerName: container.name,
+        containerName,
         homeDir,
       };
     })();
@@ -328,11 +360,11 @@ export class DockerBackend implements IRemoteBackend {
   }
 
   private async execDirect(commandArgs: string[]): Promise<string> {
-    const container = await this.resolveContainer();
+    const containerName = await this.resolveContainerName();
     return new Promise((resolve, reject) => {
       execFile(
         this.dockerCommand,
-        buildDockerExecArgs(container.name, commandArgs),
+        buildDockerExecArgs(containerName, commandArgs),
         {
           encoding: "utf8",
           maxBuffer: DOCKER_EXEC_MAX_BUFFER,
