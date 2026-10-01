@@ -20,7 +20,7 @@ import { isWorkspaceReadOnly, isWorkspaceTab } from "@/store/tabStore.js";
 import type { TaskChatMessage as TestChatMessage } from "@/lib/taskChatMessageTypes.js";
 import { useZCodeIntl } from "@/i18n/IntlProvider.js";
 import { useIsOfficeMode } from "@/hooks/useInterfaceMode.js";
-import { getPathLeaf } from "@/lib/path.js";
+import { getWorkspaceDisplayName } from "@/lib/workspaceDisplayName.js";
 import {
   addPluginStoreOpenListener,
   type PluginStoreOpenTarget,
@@ -630,7 +630,19 @@ export function App({
     },
     [handleOpenCodeViewers, isDesktop, webRemoteControlWorkspaceSwitcher, workspaceReadOnlyReason],
   );
-  const projectName = getPathLeaf(workspaceAbsPath);
+  const handleOpenTreemappingIfWritable = useCallback(
+    (...args: Parameters<typeof handleOpenTreemapping>) => {
+      if (!workspaceReadOnlyReason) {
+        handleOpenTreemapping(...args);
+      }
+    },
+    [handleOpenTreemapping, workspaceReadOnlyReason],
+  );
+  const projectName = getWorkspaceDisplayName({
+    workspacePath: workspaceAbsPath,
+    remoteTarget: workspaceRpcTarget.remoteTarget,
+    rootLabel: intl.formatMessage({ id: "workspace.rootDirectory" }),
+  });
   const handleOpenTaskFind = useCallback(() => {
     // Cmd/Ctrl+F 语义是“查找对话”，之前误复用了 Cmd/Ctrl+P 的文件搜索入口，
     // 导致用户在 quick pick 里点 Find 或按快捷键时会跳到打开文件。这里拆成独立状态，避免影响文件搜索链路。

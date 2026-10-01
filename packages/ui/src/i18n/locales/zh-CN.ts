@@ -2041,6 +2041,7 @@ const zhCN: Record<string, string> = {
   // Workspace
   "workspace.openWorkspace": "打开工作区",
   "workspace.openFolder": "打开文件夹",
+  "workspace.rootDirectory": "根目录",
   "workspace.openPluginsSettings": "插件市场",
   "workspace.backToWorkspace": "返回工作区",
   "workspace.wslUncPrompt.title": "建议通过 WSL 远程连接打开",

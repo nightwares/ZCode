@@ -2202,6 +2202,7 @@ const enUS: Record<string, string> = {
   // Workspace
   "workspace.openWorkspace": "Open workspace",
   "workspace.openFolder": "Open folder",
+  "workspace.rootDirectory": "Root directory",
   "workspace.openPluginsSettings": "Plugin Marketplace",
   "workspace.backToWorkspace": "Back to workspace",
   "workspace.wslUncPrompt.title": "Open this through WSL remote connection?",
