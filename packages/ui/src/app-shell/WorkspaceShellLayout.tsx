@@ -93,6 +93,7 @@ import { getGitDirtyFileCount } from "@/git-branch-switcher/display.js";
 import { useZCodeIntl } from "@/i18n/IntlProvider.js";
 import { useBaseWorkspaceServices } from "@/hooks/useWorkspaceServices.js";
 import { getPathLeaf, toFileUrl } from "@/lib/path.js";
+import { getWorkspaceDisplayName } from "@/lib/workspaceDisplayName.js";
 import { shouldOpenAssistantHtmlInBrowser } from "@/lib/assistantPreviewCards.js";
 import { setWorkspaceSidebarResizeActive } from "@/lib/workspaceSidebarResizeState.js";
 import { buildTaskWorkspaceKey } from "@/lib/taskQueryCache.js";
@@ -2064,7 +2065,11 @@ export const WorkspaceShellLayout = memo(
     ) {
       return (
         <DesktopWindowFrame
-          title={`ZCode / ${getPathLeaf(workspaceAbsPath)}`}
+          title={`ZCode / ${getWorkspaceDisplayName({
+            workspacePath: workspaceAbsPath,
+            remoteTarget: workspaceRemoteTarget,
+            rootLabel: intl.formatMessage({ id: "workspace.rootDirectory" }),
+          })}`}
           showHeader
           isDesktop={isDesktop}
           isMacDesktop={isMacDesktop}
@@ -2329,7 +2334,11 @@ export const WorkspaceShellLayout = memo(
         navigateToRun={handleNavigateToLaunchedRun}
       >
       <DesktopWindowFrame
-        title={`ZCode / ${getPathLeaf(workspaceAbsPath)}`}
+        title={`ZCode / ${getWorkspaceDisplayName({
+          workspacePath: workspaceAbsPath,
+          remoteTarget: workspaceRemoteTarget,
+          rootLabel: intl.formatMessage({ id: "workspace.rootDirectory" }),
+        })}`}
         showHeader
         isDesktop={isDesktop}
         isMacDesktop={isMacDesktop}
