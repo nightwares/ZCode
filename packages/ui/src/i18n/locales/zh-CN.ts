@@ -1488,6 +1488,7 @@ const zhCN: Record<string, string> = {
   "workspace.addNewWorkspace": "添加新工作区",
   "workspace.startFromScratch": "从空目录开始",
   "workspace.openFolder": "打开文件夹",
+  "workspace.rootDirectory": "根目录",
   "workspace.openPluginsSettings": "插件市场",
   "workspace.backToWorkspace": "返回工作区",
   "workspace.noActiveForNewTask": "当前还没有可用的工作区，请先打开一个工作区。",

@@ -8,6 +8,11 @@ export function getPathLeaf(path: string): string {
   return segments[segments.length - 1] ?? path;
 }
 
+export function isFileSystemRootPath(path: string): boolean {
+  const normalizedPath = path.trim().replace(/\\/g, "/");
+  return normalizedPath === "/" || /^[a-zA-Z]:\/$/.test(normalizedPath);
+}
+
 export function getContainingDirectoryPath(path: string): string | null {
   const trimmedPath = path.trim().replace(/[\\/]+$/, "");
   if (!trimmedPath) {

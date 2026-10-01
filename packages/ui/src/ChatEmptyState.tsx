@@ -29,7 +29,7 @@ import {
 import { useZCodeIntl } from "@/i18n/IntlProvider.js";
 import { useRemoteConnectionEntryVisibility } from "@/hooks/useRemoteConnectionEntryVisibility.js";
 import { cn } from "@/components/lib/utils.js";
-import { getPathLeaf } from "@/lib/path.js";
+import { getWorkspaceDisplayName } from "@/lib/workspaceDisplayName.js";
 import {
   formatRemoteWorkspaceTargetSubtitle,
   hasRemoteWorkspaceIdentity,
@@ -64,31 +64,46 @@ function inferWorkspaceHomePath(path: string) {
   return homeMatch?.[1] ?? null;
 }
 
-function getWorkspaceMenuTitle(path: string, homeLabel: string) {
+function getWorkspaceMenuTitle(
+  path: string,
+  homeLabel: string,
+  rootLabel: string,
+  remoteTarget?: RemoteTarget | null,
+) {
   const normalizedPath = path.replace(/\\/g, "/").replace(/\/+$/, "");
   if (/^(\/Users\/[^/]+|\/home\/[^/]+|[A-Za-z]:\/Users\/[^/]+)$/.test(normalizedPath)) {
     return homeLabel;
   }
 
-  return getPathLeaf(path);
+  return getWorkspaceDisplayName({ workspacePath: path, remoteTarget, rootLabel });
 }
 
-function getWorkspaceListTitle(path: string, homeLabel: string) {
+function getWorkspaceListTitle(
+  path: string,
+  homeLabel: string,
+  rootLabel: string,
+  remoteTarget?: RemoteTarget | null,
+) {
   const normalizedPath = path.replace(/\\/g, "/").replace(/\/+$/, "");
   if (/^(\/Users\/[^/]+|\/home\/[^/]+|[A-Za-z]:\/Users\/[^/]+)$/.test(normalizedPath)) {
-    return getPathLeaf(path);
+    return getWorkspaceDisplayName({ workspacePath: path, remoteTarget, rootLabel });
   }
 
-  return getWorkspaceMenuTitle(path, homeLabel);
+  return getWorkspaceMenuTitle(path, homeLabel, rootLabel, remoteTarget);
 }
 
-function getWorkspaceTriggerTitle(path: string, homeLabel: string) {
+function getWorkspaceTriggerTitle(
+  path: string,
+  homeLabel: string,
+  rootLabel: string,
+  remoteTarget?: RemoteTarget | null,
+) {
   const normalizedPath = path.replace(/\\/g, "/").replace(/\/+$/, "");
   if (/^(\/Users\/[^/]+|\/home\/[^/]+|[A-Za-z]:\/Users\/[^/]+)$/.test(normalizedPath)) {
-    return getPathLeaf(path);
+    return getWorkspaceDisplayName({ workspacePath: path, remoteTarget, rootLabel });
   }
 
-  return getWorkspaceMenuTitle(path, homeLabel);
+  return getWorkspaceMenuTitle(path, homeLabel, rootLabel, remoteTarget);
 }
 
 export interface ChatEmptyWorkspaceMenuTab {
@@ -123,10 +138,12 @@ function getRemoteWorkspaceSearchText(workspaceTab: ChatEmptyWorkspaceMenuTab) {
 function filterVisibleWorkspaceMenuTabs({
   workspaceTabs,
   homeWorkspaceLabel,
+  rootWorkspaceLabel,
   searchQuery,
 }: {
   workspaceTabs: ReadonlyArray<ChatEmptyWorkspaceMenuTab>;
   homeWorkspaceLabel: string;
+  rootWorkspaceLabel: string;
   searchQuery: string;
 }) {
   const normalizedQuery = searchQuery.trim().toLowerCase();
@@ -148,7 +165,12 @@ function filterVisibleWorkspaceMenuTabs({
         return true;
       }
 
-      const workspaceTitle = getWorkspaceListTitle(workspaceTab.workspacePath, homeWorkspaceLabel);
+      const workspaceTitle = getWorkspaceListTitle(
+        workspaceTab.workspacePath,
+        homeWorkspaceLabel,
+        rootWorkspaceLabel,
+        workspaceTab.remoteTarget,
+      );
       const searchableText = [
         workspaceTitle,
         workspaceTab.label,
@@ -241,6 +263,7 @@ export function ChatEmptyWorkspacePreviewMenu({
       : workspacePath;
   const homeWorkspacePath = inferWorkspaceHomePath(workspacePath);
   const homeWorkspaceLabel = intl.formatMessage({ id: "chat.empty.home" });
+  const rootWorkspaceLabel = intl.formatMessage({ id: "workspace.rootDirectory" });
   const isCurrentRemoteWorkspace = hasRemoteWorkspaceIdentity(currentWorkspaceTab ?? {});
   const visibleWorkspaceTabs = useMemo(
     () =>
@@ -249,13 +272,19 @@ export function ChatEmptyWorkspacePreviewMenu({
           (workspaceTab) => workspaceTab.workspacePurpose !== "conversation",
         ),
         homeWorkspaceLabel,
+        rootWorkspaceLabel,
         searchQuery: workspaceSearchQuery,
       }),
-    [homeWorkspaceLabel, workspaceSearchQuery, workspaceTabs],
+    [homeWorkspaceLabel, rootWorkspaceLabel, workspaceSearchQuery, workspaceTabs],
   );
   const currentWorkspaceTitle = isConversationWorkspace
     ? intl.formatMessage({ id: "chat.empty.selectProject" })
-    : getWorkspaceTriggerTitle(workspacePath, homeWorkspaceLabel);
+    : getWorkspaceTriggerTitle(
+        workspacePath,
+        homeWorkspaceLabel,
+        rootWorkspaceLabel,
+        currentWorkspaceTab?.remoteTarget,
+      );
   const CurrentWorkspaceIcon = isCurrentRemoteWorkspace
     ? Cloud
     : homeWorkspacePath === workspacePath
@@ -348,6 +377,8 @@ export function ChatEmptyWorkspacePreviewMenu({
             const workspaceTitle = getWorkspaceListTitle(
               workspaceTab.workspacePath,
               homeWorkspaceLabel,
+              rootWorkspaceLabel,
+              workspaceTab.remoteTarget,
             );
             const isRemoteWorkspace = hasRemoteWorkspaceIdentity(workspaceTab);
             const WorkspaceIcon = isRemoteWorkspace

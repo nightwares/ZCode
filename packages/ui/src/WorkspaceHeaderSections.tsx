@@ -26,6 +26,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu.js";
 import { useZCodeIntl } from "@/i18n/IntlProvider.js";
+import { isFileSystemRootPath } from "@/lib/path.js";
 import {
   formatRemoteWorkspaceDisplayLabel,
   formatRemoteWorkspaceHeaderHostLabel,
@@ -184,8 +185,11 @@ export function WorkspaceHeaderTitleSection({
     ? formatRemoteWorkspaceHeaderHostLabel(remoteTarget)
     : null;
   const workspaceDisplayLabel = formatRemoteWorkspaceDisplayLabel(projectName, remoteTarget);
+  // 根目录 workspace 的标题已经就是主机标识（见 getWorkspaceDisplayName），再拼 "@ host" 会重复。
   const showRemoteWorkspaceHostLabel = Boolean(
-    remoteWorkspaceHostLabel && workspaceDisplayLabel === projectName,
+    remoteWorkspaceHostLabel &&
+      workspaceDisplayLabel === projectName &&
+      !isFileSystemRootPath(workspaceAbsPath),
   );
   const workspaceContextLabel = showRemoteWorkspaceHostLabel
     ? `${workspaceDisplayLabel} @ ${remoteWorkspaceHostLabel}`
