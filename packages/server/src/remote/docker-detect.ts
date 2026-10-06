@@ -8,6 +8,11 @@ export type { DockerContainerInfo } from "@zcode/shared";
 const DOCKER_COMMAND = "docker";
 const DOCKER_EXEC_MAX_BUFFER = 8 * 1024 * 1024;
 const DOCKER_DETECT_TIMEOUT_MS = 30_000;
+// 注意不要改回 {{json .}}：json 模板会让 CLI 向 daemon 请求每个容器的磁盘占用
+// （等价于 size=1）。在 overlay2 metacopy=true / 无原生 diff 的主机上，
+// daemon 需要对每个容器的可写层做全量遍历，一次列表会从毫秒级退化到分钟级。
+// 这里只取需要的字段（TSV），彻底避开 size 计算路径。
+const DOCKER_CONTAINER_LIST_FORMAT = "{{.ID}}\t{{.Names}}\t{{.Image}}\t{{.State}}\t{{.Status}}";
 
 type DockerCommandResolutionOptions = {
   env?: Record<string, string | undefined>;
@@ -138,31 +143,20 @@ export function parseDockerContainerList(rawOutput: string): DockerContainerInfo
     .map((line) => line.trim())
     .filter((line) => line.length > 0)
     .flatMap((line) => {
-      try {
-        const parsed = JSON.parse(line) as {
-          ID?: string;
-          Image?: string;
-          Names?: string;
-          State?: string;
-          Status?: string;
-        };
-
-        if (!parsed.ID || !parsed.Names) {
-          return [];
-        }
-
-        return [
-          {
-            id: parsed.ID,
-            image: parsed.Image ?? "",
-            name: parsed.Names,
-            state: parsed.State ?? "",
-            status: parsed.Status ?? "",
-          },
-        ];
-      } catch {
+      const [id, name, image, state, ...statusParts] = line.split("\t");
+      if (!id || !name) {
         return [];
       }
+
+      return [
+        {
+          id,
+          image: image ?? "",
+          name,
+          state: state ?? "",
+          status: statusParts.join("\t"),
+        },
+      ];
     });
 }
 
@@ -185,7 +179,7 @@ export async function listDockerContainers(options?: {
   if (options?.all) {
     args.push("-a");
   }
-  args.push("--format", "{{json .}}");
+  args.push("--format", DOCKER_CONTAINER_LIST_FORMAT);
 
   const output = await execDocker(args);
   return parseDockerContainerList(output);
