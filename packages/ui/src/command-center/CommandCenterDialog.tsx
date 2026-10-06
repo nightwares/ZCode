@@ -31,6 +31,8 @@ import { toast } from "@/components/ui/toast.js";
 import { useGlobalTaskList } from "@/hooks/useGlobalTaskList.js";
 import { useServices } from "@/hooks/useServices.js";
 import { useZCodeIntl } from "@/i18n/IntlProvider.js";
+import { resolveWorkspaceTabDisplayName } from "@/lib/workspaceDisplayName.js";
+import { useWorkspaceDisplayNameOverrides } from "@/hooks/useWorkspaceDisplayName.js";
 import { FileDisplayIcon, resolveFileDisplayDescriptor } from "@/lib/fileDisplay.js";
 import { formatTaskRelativeTime } from "@/lib/taskListItemPresentation.js";
 import { toWorkspaceRelativePath } from "@/lib/taskChangeSummary.js";
@@ -432,6 +434,7 @@ export const CommandCenterDialog = memo(function CommandCenterDialogComponent({
 }) {
   const { fileService } = useServices();
   const { intl } = useZCodeIntl();
+  const workspaceDisplayNameOverrides = useWorkspaceDisplayNameOverrides();
   const workspaceKey = workspaceIdentity?.trim() || workspaceAbsPath;
   const [rawQuery, setRawQuery] = useState("");
   const [manualScope, setManualScope] = useState<CommandCenterSearchScope>("all");
@@ -501,10 +504,10 @@ export const CommandCenterDialog = memo(function CommandCenterDialogComponent({
       new Map(
         effectiveWorkspaceTabs.map((tab) => [
           tab.workspaceIdentity?.trim() || tab.workspacePath,
-          tab.label,
+          resolveWorkspaceTabDisplayName(tab, workspaceDisplayNameOverrides),
         ]),
       ),
-    [effectiveWorkspaceTabs],
+    [effectiveWorkspaceTabs, workspaceDisplayNameOverrides],
   );
   const commandOptions = useMemo(
     () =>
