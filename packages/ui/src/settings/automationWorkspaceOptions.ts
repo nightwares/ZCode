@@ -45,6 +45,8 @@ export function reconcileAutomationWorkspaceSelectionKey(
   return first ? resolveAutomationWorkspaceSelectionKey(first) : null;
 }
 
+import { resolveWorkspaceTabDisplayName } from "@/lib/workspaceDisplayName.js";
+
 function workspaceLabelFromPath(path: string): string {
   return path.replace(/\\/g, "/").split("/").filter(Boolean).pop() ?? path;
 }
@@ -56,6 +58,7 @@ function workspaceLabelFromPath(path: string): string {
  */
 export function buildAutomationWorkspaceOptions(
   tabs: readonly WindowTabState[],
+  workspaceDisplayNameOverrides?: Record<string, string> | null,
 ): AutomationWorkspaceOption[] {
   const byKey = new Map<string, AutomationWorkspaceOption>();
   for (const tab of tabs) {
@@ -76,7 +79,7 @@ export function buildAutomationWorkspaceOptions(
       ...(tab.workspaceIdentity ? { workspaceIdentity: tab.workspaceIdentity } : {}),
       ...(tab.remoteSessionId ? { remoteSessionId: tab.remoteSessionId } : {}),
       ...(tab.remoteTarget ? { remoteTarget: tab.remoteTarget } : {}),
-      label: tab.label || workspaceLabelFromPath(tab.workspacePath),
+      label: resolveWorkspaceTabDisplayName(tab, workspaceDisplayNameOverrides),
     });
   }
   return [...byKey.values()];

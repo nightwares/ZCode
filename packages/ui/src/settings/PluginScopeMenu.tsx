@@ -11,6 +11,8 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu.js";
 import { useZCodeIntl } from "@/i18n/IntlProvider.js";
+import { resolveWorkspaceTabDisplayName } from "@/lib/workspaceDisplayName.js";
+import { useWorkspaceDisplayNameOverrides } from "@/hooks/useWorkspaceDisplayName.js";
 import { getWorkspaceKey } from "@/lib/workspaceKey.js";
 import type { WorkspaceTabState } from "@/store/tabStore.js";
 
@@ -59,11 +61,12 @@ export function PluginScopeMenu({
   onScopeKeyChange: (scopeKey: string) => void;
 }) {
   const { intl } = useZCodeIntl();
+  const workspaceDisplayNameOverrides = useWorkspaceDisplayNameOverrides();
   const scopeWorkspaces =
     workspaceOptions ??
     workspaceTabs.filter(isPluginScopeWorkspaceConnected).map((tab) => ({
       key: getPluginWorkspaceKey(tab),
-      label: tab.label,
+      label: resolveWorkspaceTabDisplayName(tab, workspaceDisplayNameOverrides),
       remote: Boolean(tab.remoteTarget || tab.remoteSessionId),
     }));
   const selectedWorkspace = scopeWorkspaces.find((workspace) => workspace.key === selectedScopeKey);

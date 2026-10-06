@@ -16,6 +16,7 @@ import { useZCodeIntl } from "@/i18n/IntlProvider.js";
 import { useTabStore } from "@/store/TabStoreProvider.js";
 import { useDynamicWorkflowAvailability } from "@/hooks/useDynamicWorkflowAvailability.js";
 import { setPendingSettingsSectionIntent } from "@/lib/settingsNavigation.js";
+import { useWorkspaceDisplayNameOverrides } from "@/hooks/useWorkspaceDisplayName.js";
 import {
   buildAutomationWorkspaceOptions,
   type AutomationWorkspaceOption,
@@ -109,7 +110,11 @@ export function SavedWorkflowsSection({
     setPendingSettingsSectionIntent("general");
     openSettingsTab();
   }, [openSettingsTab]);
-  const projects = useMemo(() => buildAutomationWorkspaceOptions(tabs), [tabs]);
+  const workspaceDisplayNameOverrides = useWorkspaceDisplayNameOverrides();
+  const projects = useMemo(
+    () => buildAutomationWorkspaceOptions(tabs, workspaceDisplayNameOverrides),
+    [tabs, workspaceDisplayNameOverrides],
+  );
   // 全局组的运行 / 移动落点只能是本机项目：过滤掉远程 workspace。
   const localProjects = useMemo(
     () => projects.filter((project) => !project.remoteSessionId),
