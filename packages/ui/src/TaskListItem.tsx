@@ -17,6 +17,8 @@ import { Button } from "@/components/ui/button.js";
 import { cn } from "@/components/lib/utils.js";
 import { ControlHintTooltip } from "@/ControlHintTooltip.js";
 import { getPathLeaf } from "@/lib/path.js";
+import { resolveWorkspaceDisplayName } from "@/lib/workspaceDisplayName.js";
+import { useWorkspaceDisplayNameOverrides } from "@/hooks/useWorkspaceDisplayName.js";
 import { formatTaskTitleWithChanges, getTaskChangeSummary } from "@/lib/taskChangeSummary.js";
 import {
   deriveTaskLeadingIndicator,
@@ -382,7 +384,12 @@ export const MemoTaskItem = memo(function TaskListItem({
     id: isArchiveConfirming ? "common.confirm" : "taskList.archive",
   });
   const taskTitleWithChanges = formatTaskTitleWithChanges(taskTitle, taskChangeSummary, intl);
-  const workspaceLabel = getPathLeaf(task.workspacePath);
+  const workspaceDisplayNameOverrides = useWorkspaceDisplayNameOverrides();
+  const workspaceLabel = resolveWorkspaceDisplayName({
+    workspacePath: task.workspacePath,
+    workspaceIdentity: task.workspaceIdentity,
+    overrides: workspaceDisplayNameOverrides,
+  });
   const taskItemKey = `${buildTaskWorkspaceKey(task.workspacePath, task.workspaceIdentity)}:${task.taskId}`;
   // 工作流运行行：标题下的第二条通道，
   // 与前置 16px 槽（error > unread > spinner）互不占位。只在会话带 run 摘要时挂组件。

@@ -136,6 +136,8 @@ import {
   workspaceVerticalListSortingStrategy,
 } from "@/lib/workspaceSidebarDrag.js";
 import { createPortal } from "react-dom";
+import { resolveWorkspaceTabDisplayName } from "@/lib/workspaceDisplayName.js";
+import { useWorkspaceDisplayNameOverrides } from "@/hooks/useWorkspaceDisplayName.js";
 
 function WorkspaceNewTaskTooltip({
   children,
@@ -181,6 +183,7 @@ const EMPTY_RECONNECTING_REMOTE_WORKSPACE_LOGS_BY_WORKSPACE_KEY: Record<
 
 function WorkspaceDragOverlay({ tab, width }: { tab: WorkspaceTabState; width: number | null }) {
   const isRemote = Boolean(tab.remoteSessionId || tab.remoteTarget || tab.workspaceIdentity);
+  const workspaceDisplayNameOverrides = useWorkspaceDisplayNameOverrides();
   return (
     <div
       data-testid="workspace-drag-overlay"
@@ -194,7 +197,7 @@ function WorkspaceDragOverlay({ tab, width }: { tab: WorkspaceTabState; width: n
       ) : (
         <Folder className="size-3.5 shrink-0 text-foreground-subtle" />
       )}
-      <span className="min-w-0 flex-1 truncate px-1">{tab.label}</span>
+      <span className="min-w-0 flex-1 truncate px-1">{resolveWorkspaceTabDisplayName(tab, workspaceDisplayNameOverrides)}</span>
     </div>
   );
 }

@@ -23,6 +23,8 @@ import { OFF_PEAK_DEFAULT_GROUP_ID, type ZCodeTaskMeta } from "@zcode/shared";
 import { createPortal } from "react-dom";
 import { cn } from "@/components/lib/utils.js";
 import { useZCodeIntl } from "@/i18n/IntlProvider.js";
+import { resolveWorkspaceTabDisplayName } from "@/lib/workspaceDisplayName.js";
+import { useWorkspaceDisplayNameOverrides } from "@/hooks/useWorkspaceDisplayName.js";
 import { TaskRenameDialog } from "@/TaskRenameDialog.js";
 import { shouldHideGroupedTaskContent, useGroupedTaskView } from "@/hooks/useGroupedTaskView.js";
 import type { WorkspaceTabState } from "@/store/tabStore.js";
@@ -556,6 +558,7 @@ export function WorkspaceGroupedTasksSection({
   onOpenAutomations?: () => void;
 }) {
   const { intl } = useZCodeIntl();
+  const workspaceDisplayNameOverrides = useWorkspaceDisplayNameOverrides();
   const baseServices = useBaseWorkspaceServices();
   const sessionsById = useRemoteWorkspaceSessionStore((state) => state.sessionsById);
   const sessionIdByWorkspaceIdentity = useRemoteWorkspaceSessionStore(
@@ -866,9 +869,11 @@ export function WorkspaceGroupedTasksSection({
           id: "workspaceSidebar.conversationsSection",
         });
       }
-      return tab?.label || getPathLeaf(task.workspacePath) || task.workspacePath;
+      return tab
+        ? resolveWorkspaceTabDisplayName(tab, workspaceDisplayNameOverrides)
+        : getPathLeaf(task.workspacePath) || task.workspacePath;
     },
-    [intl, workspaceTabByKey],
+    [intl, workspaceDisplayNameOverrides, workspaceTabByKey],
   );
   const draftWorkspaceLabel = useMemo(() => {
     const tab = workspaceTabByKey.get(
@@ -879,8 +884,10 @@ export function WorkspaceGroupedTasksSection({
         id: "workspaceSidebar.conversationsSection",
       });
     }
-    return tab?.label || getPathLeaf(activeWorkspacePath) || activeWorkspacePath;
-  }, [activeWorkspaceIdentity, activeWorkspacePath, intl, workspaceTabByKey]);
+    return tab
+      ? resolveWorkspaceTabDisplayName(tab, workspaceDisplayNameOverrides)
+      : getPathLeaf(activeWorkspacePath) || activeWorkspacePath;
+  }, [activeWorkspaceIdentity, activeWorkspacePath, intl, workspaceDisplayNameOverrides, workspaceTabByKey]);
 
   const getTaskRemoteSessionId = useCallback(
     (task: ZCodeTaskMeta) =>

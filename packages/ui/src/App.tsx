@@ -17,7 +17,8 @@ import { isWorkspaceReadOnly, isWorkspaceTab } from "@/store/tabStore.js";
 import type { TaskChatMessage as TestChatMessage } from "@/lib/taskChatMessageTypes.js";
 import { useZCodeIntl } from "@/i18n/IntlProvider.js";
 import { useIsOfficeMode } from "@/hooks/useInterfaceMode.js";
-import { getWorkspaceDisplayName } from "@/lib/workspaceDisplayName.js";
+import { resolveWorkspaceDisplayName } from "@/lib/workspaceDisplayName.js";
+import { useWorkspaceDisplayNameOverrides } from "@/hooks/useWorkspaceDisplayName.js";
 import {
   addPluginStoreOpenListener,
   type PluginStoreOpenTarget,
@@ -597,10 +598,13 @@ export function App({
     },
     [handleOpenTreemapping, workspaceReadOnlyReason],
   );
-  const projectName = getWorkspaceDisplayName({
+  const workspaceDisplayNameOverrides = useWorkspaceDisplayNameOverrides();
+  const projectName = resolveWorkspaceDisplayName({
     workspacePath: workspaceAbsPath,
+    workspaceIdentity: workspaceIdentity,
     remoteTarget: workspaceRpcTarget.remoteTarget,
     rootLabel: intl.formatMessage({ id: "workspace.rootDirectory" }),
+    overrides: workspaceDisplayNameOverrides,
   });
   const handleOpenTaskFind = useCallback(() => {
     // Cmd/Ctrl+F 语义是“查找对话”，之前误复用了 Cmd/Ctrl+P 的文件搜索入口，

@@ -7,6 +7,8 @@ import { useConfirmDialog } from "@/hooks/useConfirmDialog.js";
 import { useGlobalTaskList } from "@/hooks/useGlobalTaskList.js";
 import { useBaseWorkspaceServices } from "@/hooks/useWorkspaceServices.js";
 import { useZCodeIntl } from "@/i18n/IntlProvider.js";
+import { resolveWorkspaceTabDisplayName } from "@/lib/workspaceDisplayName.js";
+import { useWorkspaceDisplayNameOverrides } from "@/hooks/useWorkspaceDisplayName.js";
 import { formatTaskRelativeTime } from "@/lib/taskListItemPresentation.js";
 import { getTaskChangeSummary } from "@/lib/taskChangeSummary.js";
 import { getPathLeaf } from "@/lib/path.js";
@@ -43,6 +45,7 @@ export function WorkspaceArchivedTasksFlatSection({
   ) => void;
 }) {
   const { intl } = useZCodeIntl();
+  const workspaceDisplayNameOverrides = useWorkspaceDisplayNameOverrides();
   const confirmDialog = useConfirmDialog();
   const baseServices = useBaseWorkspaceServices();
   const sessionsById = useRemoteWorkspaceSessionStore((state) => state.sessionsById);
@@ -70,11 +73,11 @@ export function WorkspaceArchivedTasksFlatSection({
           (tab) =>
             [
               buildTaskWorkspaceKey(tab.workspacePath, tab.workspaceIdentity),
-              tab.label || getPathLeaf(tab.workspacePath),
+              resolveWorkspaceTabDisplayName(tab, workspaceDisplayNameOverrides),
             ] as const,
         ),
       ),
-    [workspaceTabs],
+    [workspaceDisplayNameOverrides, workspaceTabs],
   );
 
   const workspaceServiceLookup = useMemo(
@@ -101,7 +104,7 @@ export function WorkspaceArchivedTasksFlatSection({
         workspaces={workspaceTabs.map((tab) => ({
           workspacePath: tab.workspacePath,
           workspaceIdentity: tab.workspaceIdentity,
-          label: tab.label || getPathLeaf(tab.workspacePath),
+          label: resolveWorkspaceTabDisplayName(tab, workspaceDisplayNameOverrides),
           service: workspaceServiceLookup.get(
             buildTaskWorkspaceKey(tab.workspacePath, tab.workspaceIdentity),
           )?.services.zcodeTaskService,

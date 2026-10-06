@@ -3,6 +3,8 @@ import type { WorkspacePurpose } from "@zcode/shared";
 import { useTabStore } from "@/store/TabStoreProvider.js";
 import { isWorkspaceTab, type WorkspaceTabState } from "@/store/tabStore.js";
 import { useLocalWorkspaceScopes } from "@/hooks/useLocalWorkspaceScopes.js";
+import { resolveWorkspaceTabDisplayName } from "@/lib/workspaceDisplayName.js";
+import { useWorkspaceDisplayNameOverrides } from "@/hooks/useWorkspaceDisplayName.js";
 
 interface AutomationProjectOption {
   workspacePath: string;
@@ -21,6 +23,7 @@ interface AutomationProjectOptionsConfig {
 function resolveAutomationProjectOptions(
   workspaceTabs: WorkspaceTabState[],
   config: AutomationProjectOptionsConfig = {},
+  workspaceDisplayNameOverrides?: Record<string, string> | null,
 ): AutomationProjectOption[] {
   const result: AutomationProjectOption[] = [];
   let conversationWorkspaceIncluded = false;
@@ -46,7 +49,7 @@ function resolveAutomationProjectOptions(
 
     result.push({
       workspacePath: tab.workspacePath,
-      label: tab.label || workspaceBasename(tab.workspacePath),
+      label: resolveWorkspaceTabDisplayName(tab, workspaceDisplayNameOverrides) || workspaceBasename(tab.workspacePath),
     });
   }
 
@@ -65,16 +68,21 @@ export function useAutomationProjectOptions(
   config: AutomationProjectOptionsConfig = {},
 ): AutomationProjectOption[] {
   const tabs = useTabStore((state) => state.tabs);
+  const workspaceDisplayNameOverrides = useWorkspaceDisplayNameOverrides();
   const workspaceTabs = useMemo(() => tabs.filter(isWorkspaceTab), [tabs]);
   const localWorkspaceTabs = useLocalWorkspaceScopes({ workspaceTabs });
   const includeConversationWorkspace = config.includeConversationWorkspace === true;
 
   return useMemo(
     () =>
-      resolveAutomationProjectOptions(localWorkspaceTabs, {
-        includeConversationWorkspace,
-      }),
-    [includeConversationWorkspace, localWorkspaceTabs],
+      resolveAutomationProjectOptions(
+        localWorkspaceTabs,
+        {
+          includeConversationWorkspace,
+        },
+        workspaceDisplayNameOverrides,
+      ),
+    [includeConversationWorkspace, localWorkspaceTabs, workspaceDisplayNameOverrides],
   );
 }
 

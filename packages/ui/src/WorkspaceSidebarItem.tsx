@@ -51,7 +51,13 @@ import {
   buildWorkspaceSessionKey,
   formatRemoteWorkspaceDisplayLabel,
 } from "@/lib/remoteWorkspaceHistory.js";
+import {
+  getWorkspaceDisplayNameKey,
+  resolveWorkspaceDisplayName,
+} from "@/lib/workspaceDisplayName.js";
+import { useWorkspaceRename } from "@/hooks/useWorkspaceDisplayName.js";
 import { TaskList } from "@/TaskList.js";
+import { TaskRenameDialog } from "@/TaskRenameDialog.js";
 import { selectWorkspaceZCodeState, useZCodeSessionStore } from "@/store/zcodeSessionStore.js";
 import type { WorkspaceTabState } from "@/store/tabStore.js";
 import type { RemoteConnectionLogEntry } from "@/hooks/useRemoteConnectionLogs.js";
@@ -232,7 +238,20 @@ export const WorkspaceSidebarItem = memo(function WorkspaceSidebarItem({
     isDisconnectedRemoteWorkspace && reconnectingRemoteWorkspaceKeys.includes(remoteWorkspaceKey),
   );
   const remoteWorkspaceError = remoteWorkspaceErrorByWorkspaceKey[remoteWorkspaceKey];
-  const workspaceSidebarLabel = formatRemoteWorkspaceDisplayLabel(tab.label, tab.remoteTarget);
+  // workspace 行展示名：用户 rename 覆盖优先，其次自动派生（根目录回落主机标识，修复 "/" 退化）。
+  const { overrides: workspaceDisplayNameOverrides, setDisplayName: setWorkspaceDisplayName } =
+    useWorkspaceRename();
+  const workspaceRenameKey = getWorkspaceDisplayNameKey(tab);
+  const workspaceSidebarLabel = formatRemoteWorkspaceDisplayLabel(
+    resolveWorkspaceDisplayName({
+      workspacePath: tab.workspacePath,
+      workspaceIdentity: tab.workspaceIdentity,
+      remoteTarget: tab.remoteTarget,
+      rootLabel: intl.formatMessage({ id: "workspace.rootDirectory" }),
+      overrides: workspaceDisplayNameOverrides,
+    }),
+    tab.remoteTarget,
+  );
   const sshWorkspaceTooltipDetails = getSshWorkspaceTooltipDetails(tab);
   const reconnectRuntimeLogs =
     reconnectingRemoteWorkspaceLogsByWorkspaceKey[remoteWorkspaceKey] ?? [];
@@ -259,6 +278,9 @@ export const WorkspaceSidebarItem = memo(function WorkspaceSidebarItem({
   const [remoteSkillSyncOpen, setRemoteSkillSyncOpen] = useState(false);
   const [remoteMcpSyncOpen, setRemoteMcpSyncOpen] = useState(false);
   const [remotePluginSyncOpen, setRemotePluginSyncOpen] = useState(false);
+  const [workspaceRenameOpen, setWorkspaceRenameOpen] = useState(false);
+  const [workspaceRenameDraft, setWorkspaceRenameDraft] = useState("");
+  const workspaceRenameInputRef = useRef<HTMLInputElement>(null);
   const [workspaceRowHovered, setWorkspaceRowHovered] = useState(false);
   const [workspaceRowFocusWithin, setWorkspaceRowFocusWithin] = useState(false);
   const [workspaceActionMenuOpen, setWorkspaceActionMenuOpen] = useState(false);
@@ -345,6 +367,35 @@ export const WorkspaceSidebarItem = memo(function WorkspaceSidebarItem({
     },
     [onStartDraftInWorkspace, readOnlyReason, tab.workspaceIdentity, tab.workspacePath],
   );
+
+  const handleStartWorkspaceRename = useCallback(() => {
+    setWorkspaceRenameDraft(workspaceDisplayNameOverrides[workspaceRenameKey] ?? "");
+    setWorkspaceRenameOpen(true);
+  }, [workspaceDisplayNameOverrides, workspaceRenameKey]);
+
+  const handleConfirmWorkspaceRename = useCallback(() => {
+    const nextName = workspaceRenameDraft.trim();
+    setWorkspaceRenameOpen(false);
+    if (!nextName) {
+      return;
+    }
+    void setWorkspaceDisplayName(tab, nextName).catch((error) => {
+      logger.error("[WorkspaceSidebarItem] 重命名 workspace 失败", { error });
+      toast(intl.formatMessage({ id: "workspace.renameFailed" }), { variant: "warning" });
+    });
+  }, [
+    intl,
+    setWorkspaceDisplayName,
+    tab,
+    workspaceRenameDraft,
+  ]);
+
+  const handleResetWorkspaceDisplayName = useCallback(() => {
+    void setWorkspaceDisplayName(tab, null).catch((error) => {
+      logger.error("[WorkspaceSidebarItem] 恢复 workspace 自动命名失败", { error });
+      toast(intl.formatMessage({ id: "workspace.renameFailed" }), { variant: "warning" });
+    });
+  }, [intl, setWorkspaceDisplayName, tab]);
 
   const handleRemoveWorkspace = useCallback(async () => {
     const workspaceKey = tab.workspaceIdentity?.trim() || tab.workspacePath;
@@ -455,7 +506,7 @@ export const WorkspaceSidebarItem = memo(function WorkspaceSidebarItem({
 
       onOpenFileTree({
         workspacePath: tab.workspacePath,
-        workspaceName: tab.label,
+        workspaceName: workspaceSidebarLabel,
         workspaceIdentity: tab.workspaceIdentity,
         workspaceRemoteSessionId: tab.remoteSessionId,
       });
@@ -464,7 +515,7 @@ export const WorkspaceSidebarItem = memo(function WorkspaceSidebarItem({
       isDisconnectedRemoteWorkspace,
       onOpenFileTree,
       readOnlyReason,
-      tab.label,
+      workspaceSidebarLabel,
       tab.remoteSessionId,
       tab.workspaceIdentity,
       tab.workspacePath,
@@ -931,6 +982,36 @@ export const WorkspaceSidebarItem = memo(function WorkspaceSidebarItem({
                             onOpenPluginSync={() => setRemotePluginSyncOpen(true)}
                           />
                           <DropdownMenuItem
+                            onMouseDown={(event) => {
+                              event.preventDefault();
+                              event.stopPropagation();
+                            }}
+                            onSelect={(event) => {
+                              event.preventDefault();
+                              handleStartWorkspaceRename();
+                            }}
+                          >
+                            {intl.formatMessage({
+                              id: "workspace.rename",
+                            })}
+                          </DropdownMenuItem>
+                          {workspaceDisplayNameOverrides[workspaceRenameKey] ? (
+                            <DropdownMenuItem
+                              onMouseDown={(event) => {
+                                event.preventDefault();
+                                event.stopPropagation();
+                              }}
+                              onSelect={(event) => {
+                                event.preventDefault();
+                                handleResetWorkspaceDisplayName();
+                              }}
+                            >
+                              {intl.formatMessage({
+                                id: "workspace.resetName",
+                              })}
+                            </DropdownMenuItem>
+                          ) : null}
+                          <DropdownMenuItem
                             data-testid={testId(TID_WORKSPACE_CLOSE, tab.workspacePath)}
                             onMouseDown={(event) => {
                               event.preventDefault();
@@ -1195,6 +1276,20 @@ export const WorkspaceSidebarItem = memo(function WorkspaceSidebarItem({
             zcodeSessionService: services.zcodeSessionService,
           });
         }}
+      />
+      <TaskRenameDialog
+        open={workspaceRenameOpen}
+        value={workspaceRenameDraft}
+        inputRef={workspaceRenameInputRef}
+        intl={intl}
+        titleId="workspace.rename"
+        placeholderId="workspace.renamePlaceholder"
+        onOpenChange={setWorkspaceRenameOpen}
+        onChange={setWorkspaceRenameDraft}
+        onCancel={() => {
+          setWorkspaceRenameOpen(false);
+        }}
+        onConfirm={handleConfirmWorkspaceRename}
       />
     </li>
   );
