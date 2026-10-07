@@ -141,7 +141,7 @@ import {
   startManualClaimHeartbeat,
   settleCronRunTerminalOutcome,
   settleManualDispatchFailureBestEffort,
-} from "./cronRunLifecycle.js";
+} from "@zcode/services/node";
 import {
   createRemotePromptAttachmentSessionService,
   createRemotePromptAttachmentTaskService,
