@@ -6354,6 +6354,7 @@ const enUS: Record<string, string> = {
   "settings.automations.betaBadge": "Beta",
   "automations.noWorkspace": "Open a workspace to manage its scheduled tasks.",
   "automations.workspace.label": "Project",
+  "automations.remoteTargetHint": "Remote target: at fire time the app must be running and the container connected; missed fires retry with backoff.",
   "automations.description":
     "Schedule recurring tasks or queue background work that runs during idle time.",
   "automations.description.populated": "Run tasks on a schedule or whenever you need them.",

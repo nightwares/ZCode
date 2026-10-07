@@ -250,6 +250,14 @@ export {
   computeRetryAt,
 } from "./session/automationRepo.js";
 export { AutomationService, InvalidCronExprError } from "./session/automationService.js";
+// cron/manual run 的结算原语：desktop host 与远端 server 的手动派发器共用，
+// 避免两份实现漂移。依赖只有 @zcode/shared 类型。
+export {
+  recordCronRunOutcomeBestEffort,
+  startManualClaimHeartbeat,
+  settleCronRunTerminalOutcome,
+  settleManualDispatchFailureBestEffort,
+} from "./session/automationRunLifecycle.js";
 // 闲时任务与 automation 同库不同表；类型/常量全独立。
 export { OffPeakTaskRepo, OFF_PEAK_CLAIM_STALE_MS } from "./session/offPeakTaskRepo.js";
 // host 域终态回填 files_changed 复用现有 task diff 汇总。

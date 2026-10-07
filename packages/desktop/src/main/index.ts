@@ -653,8 +653,21 @@ function wakeOffPeakScheduler(offPeakTaskId?: string): void {
   // 复用同一条 scheduler-wake 通道（tick 同时覆盖 cron 与 off-peak 分支），仅日志标签区分。
   cronScheduler?.wake(`offpeak:${offPeakTaskId ?? "sync"}`);
 }
-// 选一个本地 host 执行派发：本期本地 workspace 由任一本地窗口 host 的 createTask 按 path 拉起/复用 agent。
-function resolveCronDispatchHost(): ElectronUtilityProcess | null {
+// 选一个本地 host 执行派发：本地 workspace 由任一本地窗口 host 的 createTask 按 path 拉起/复用 agent；
+// 远端 workspace（devcontainer/SSH/WSL）必须路由到持有该会话的窗口 host，
+// 盲选第一个 host 会在多窗口时把 CronRun 发给没有连接的 host 而注定失败。
+function resolveCronDispatchHost(request?: {
+  workspacePath?: string;
+  workspaceIdentity?: string;
+}): ElectronUtilityProcess | null {
+  if (request?.workspaceIdentity?.trim()) {
+    const sessionHost = remoteSessionManager.resolveRemoteSessionHostForWorkspaceKey({
+      workspacePath: request.workspacePath ?? "",
+      workspaceIdentity: request.workspaceIdentity,
+    });
+    // 远端会话不在线时返回 null：scheduler 按 transient 退避重试，等待容器重新连接。
+    return sessionHost;
+  }
   const first = windowHostProcessMap.values().next();
   return first.done ? null : first.value;
 }

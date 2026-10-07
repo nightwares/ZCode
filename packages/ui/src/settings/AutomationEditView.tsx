@@ -1257,6 +1257,8 @@ export function AutomationEditView({
 
   const localWorkspaceOptions = useAutomationProjectOptions({
     includeConversationWorkspace: true,
+    // 定时任务允许选择已连接的远端 workspace；派发由桌面端路由到持有会话的窗口 host。
+    includeRemoteWorkspaces: true,
   });
   const editingWorkspaceOption = editing
     ? findAutomationWorkspaceOptionByKey(localWorkspaceOptions, editing.workspaceKey)
@@ -2637,6 +2639,13 @@ export function AutomationEditView({
                         })}
                       </Button>
                     )}
+
+                    {selectedWorkspaceIdentity ? (
+                      // 远端目标在触发时刻依赖桌面端在线 + 容器已连接；离线时 scheduler 退避重试。
+                      <p className="w-full text-ui-sm text-foreground-subtle">
+                        {intl.formatMessage({ id: "automations.remoteTargetHint" })}
+                      </p>
+                    ) : null}
 
                     {/* 自动化曾复制首页权限菜单，导致图标、字号和选中态逐渐分叉。
                         直接复用首页 ConfigSelect，只覆盖紧凑 trigger 布局。 */}

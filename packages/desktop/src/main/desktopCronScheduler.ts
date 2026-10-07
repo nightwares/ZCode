@@ -39,7 +39,10 @@ interface CronSchedulerDeps {
     error: (...args: unknown[]) => void;
   };
   /** 选一个能执行本地 workspace 派发的 host；无可用 host 时返回 null（scheduler 会退避重试）。 */
-  resolveDispatchHost: () => ElectronUtilityProcess | null;
+  resolveDispatchHost: (request?: {
+    workspacePath?: string;
+    workspaceIdentity?: string;
+  }) => ElectronUtilityProcess | null;
   /** 闲时任务执行中计数变化（keep-awake：main 据此 + 设置切 powerSaveBlocker）。 */
   onOffPeakActiveCountChanged?: (count: number) => void;
 }
@@ -116,15 +119,21 @@ export function spawnCronScheduler(deps: CronSchedulerDeps): CronSchedulerHandle
         });
         return;
       }
-      const host = deps.resolveDispatchHost();
+      const host = deps.resolveDispatchHost({
+        workspacePath: msg.workspacePath,
+        workspaceIdentity: msg.workspaceIdentity,
+      });
       if (!host) {
-        // 没有可派发的本地 host（无窗口/未就绪）：按 transient 回执，scheduler 退避后重试。
+        // 没有可派发的 host：本地目标=无窗口/未就绪；远端目标=没有任何窗口 host 持有该会话
+        // （容器未连接/已断开）。两者都按 transient 回执，scheduler 退避后重试。
         postToScheduler({
           type: "cron-dispatch-result",
           runId: msg.runId,
           ok: false,
           failureKind: "transient",
-          error: "no local host available",
+          error: msg.workspaceIdentity?.trim()
+            ? "remote workspace session is not connected in any window host"
+            : "no local host available",
         });
         return;
       }

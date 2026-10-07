@@ -878,6 +878,31 @@ export function createRemoteWorkspaceSessionManager(options: {
     );
   }
 
+  // cron 派发需要把远端 automation 路由到持有其会话的窗口 host；
+  // 这里只按 workspaceKey 匹配 attachable 路由，不触发连接或副作用。
+  function resolveRemoteSessionHostForWorkspaceKey(params: {
+    workspacePath: string;
+    workspaceIdentity?: string;
+  }): ElectronUtilityProcess | null {
+    const workspaceKey = resolveWorkspaceKey({
+      workspacePath: params.workspacePath,
+      workspaceIdentity: params.workspaceIdentity,
+    });
+    for (const route of routesBySessionId.values()) {
+      if (route.attachmentState !== "attachable") continue;
+      const routeKey = resolveWorkspaceKey({
+        workspacePath: route.descriptor.workspacePath ?? "",
+        workspaceIdentity: route.descriptor.workspaceIdentity,
+      });
+      if (routeKey !== workspaceKey) continue;
+      const host = options.windowHostProcessMap.get(route.webContentsId);
+      if (host && host.pid != null) {
+        return host;
+      }
+    }
+    return null;
+  }
+
   function attachRemoteWorkspaceSessionHost(params: {
     windowId: number;
     remoteSessionId: string;
@@ -1005,6 +1030,7 @@ export function createRemoteWorkspaceSessionManager(options: {
     confirmRendererAttachmentReady,
     reattachRemoteWorkspaceSessionsForWindow,
     hasRemoteWorkspaceSessionForTarget,
+    resolveRemoteSessionHostForWorkspaceKey,
     createBotRemoteWorkspaceRuntimePort,
     getRemoteConnectionStats,
     disposeRemoteWorkspaceSession,
