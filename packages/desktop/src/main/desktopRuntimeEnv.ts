@@ -314,6 +314,18 @@ export function resolveRemoteAssetDirs(
   // 功能开关：开发态默认继续走 mock-cdn，只有显式打开开关才切到公网 CDN。
   // 这样能兼容离线开发场景，同时允许在开发环境提前验证真实 CDN 下载链路。
   if (isElectronAppPackaged() || shouldUseRemoteCdnInDevelopment(localEnv)) {
+    // fork 构建（版本号带自定义 prerelease 段，如 -nightwares.1）在官方 CDN 上没有
+    // 对应 release，manifest 解析会 404。显式指定本地 releases 根目录时走与开发态
+    // mock-cdn 相同的 LocalUpload 链路；目录缺失当前版本时保持原 CDN 行为不变。
+    const localReleasesRoot = resolveEnvValue("ZCODE_REMOTE_ASSET_MOCK_CDN_DIR", localEnv)?.trim();
+    if (localReleasesRoot && existsSync(join(localReleasesRoot, "releases", ZCODE_VERSION))) {
+      return {
+        mockCdnDir: localReleasesRoot,
+        remoteCdnBaseUrl,
+        remoteCdnBaseUrls,
+        remoteCacheDir: resolveRemoteAssetCacheDir(localEnv),
+      };
+    }
     return {
       remoteCdnBaseUrl,
       remoteCdnBaseUrls,
