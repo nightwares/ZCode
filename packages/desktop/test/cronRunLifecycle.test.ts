@@ -1,10 +1,12 @@
 import { describe, expect, it, vi } from "vitest";
+// 958dbc8 起 cron/manual run 的结算原语下沉到 @zcode/services（远端 server 的手动
+// 派发器共用同一份实现）；desktop 侧统一从 services/node 导入。
 import {
   recordCronRunOutcomeBestEffort,
   startManualClaimHeartbeat,
   settleCronRunTerminalOutcome,
   settleManualDispatchFailureBestEffort,
-} from "../src/host/cronRunLifecycle.js";
+} from "@zcode/services/node";
 
 function createRepo() {
   return {
