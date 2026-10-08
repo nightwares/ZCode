@@ -60,6 +60,14 @@ import {
 } from "@zcode/shared";
 import type { RemoteTarget } from "@zcode/shared";
 import {
+  type BrowserBackendDescriptor,
+  type BrowserCommandResult,
+  type ZCodeBrowserListParams,
+  type ZCodeBrowserExecuteParams,
+  zcodeBrowserListParamsSchema,
+  zcodeBrowserExecuteParamsSchema,
+} from "@zcode/shared";
+import {
   createRemoteProviderProvisioningExecutorFromWorkspace,
   registerRemoteProviderProvisioningExecutor,
 } from "./remoteProviderProvisioningService.js";
@@ -173,6 +181,8 @@ export function resolveServerProjectService(params: {
   });
 }
 
+const browserControlLogger = createServiceLogger("remote-browser-control");
+
 export function createServerRemoteWorkspaceServiceCollection(params: {
   clientConfigService: IClientConfigService;
   connectionServices: IServiceAccessor;
@@ -181,6 +191,17 @@ export function createServerRemoteWorkspaceServiceCollection(params: {
   targetKind: RemoteTarget["kind"];
   /** 本机 Local Host 服务；提供 Provider Provisioning Source，缺失时 Provisioning 按 unsupported 处理。 */
   sourceServices?: ServiceCollection;
+  /**
+   * browser-use 中继（Tier 3a）：远端 agent 的 browser 命令经 stdio 转发到这里，
+   * 再由既有 browserControlMainBridge 走桌面 IAB（WebContentsView+CDP）执行。
+   * 形状即 createBrowserControlMainBridge 的返回值（list/execute）。
+   */
+  browserControlRelay?: {
+    list(input: ZCodeBrowserListParams): Promise<BrowserBackendDescriptor[]>;
+    execute(input: ZCodeBrowserExecuteParams): Promise<BrowserCommandResult>;
+  };
+  /** Defense-in-depth：请求携带的 remoteSessionId 是否像本窗口已登记的 logical session。 */
+  isPlausibleRemoteSessionId?: (remoteSessionId: string) => boolean;
 }): ServiceCollection {
   assertRemoteWorkspaceRpcContract(params.connectionServices);
   // Server remote 连接的是一个已经运行的完整 ZCode server。
@@ -311,5 +332,103 @@ export function createServerRemoteWorkspaceServiceCollection(params: {
     throw new Error(`Remote workspace RPC registration incomplete: ${missing.join(", ")}`);
   }
   registerRemoteProviderProvisioningExecutor(services, remoteProviderProvisioningExecutor);
+  // Tier 3a browser 桥：远端 agent 的 browser-use 命令经 stdio 到达这里，转发给桌面
+  // Host 既有的 browserControlMainBridge（IAB），结果原路 respond 回远端。订阅寿命与
+  // 远端 services 的 dispose 一起收口。
+  if (params.browserControlRelay) {
+    const relay = params.browserControlRelay;
+    const warnIfRemoteSessionIdImplausible = (
+      remoteSessionId: string | undefined,
+      requestContext: Record<string, unknown>,
+    ): void => {
+      if (!remoteSessionId || !params.isPlausibleRemoteSessionId) {
+        return;
+      }
+      if (params.isPlausibleRemoteSessionId(remoteSessionId)) {
+        return;
+      }
+      // Defense-in-depth：remoteSessionId 用于录制产物上传归属等路由，真正的授权边界
+      // 在 main 侧命令执行与 resolveScopedCapabilities 的完整 scope 校验。这里只 warn
+      // 仍继续服务，避免 logical session 尚未登记/已换代时误伤正常命令。
+      browserControlLogger.warn(undefined, "browser control remoteSessionId not recognized", {
+        ...requestContext,
+        remoteSessionId,
+      });
+    };
+    params.connectionServices.zcodeAgentService.onDynamicBrowserControlRequest()((request) => {
+      const startedAt = Date.now();
+      const requestContext = {
+        event: "zcode_protocol.browser_control.host_request_received",
+        module: "desktop.host.remote_workspace",
+        kind: request.kind,
+        requestId: request.requestId,
+      };
+      browserControlLogger.info(undefined, "browser control host request received", requestContext);
+      const respondRelayFailure = async (message: string): Promise<void> => {
+        // relay_failed 错误壳会被远端 respondBrowserControl 的 schema 校验拒绝并按
+        // backend_unavailable + uncertain 结算——语义等价，无需为它扩协议错误码。
+        await params.connectionServices.zcodeAgentService.respondBrowserControl({
+          requestId: request.requestId,
+          result: {
+            ok: false,
+            error: { code: "relay_failed", message, sideEffect: "uncertain" },
+            elapsedMs: 0,
+          },
+        });
+      };
+      void (async () => {
+        let result: Record<string, unknown>;
+        if (request.kind === "list") {
+          const parsed = zcodeBrowserListParamsSchema.safeParse(request.input);
+          if (!parsed.success) {
+            browserControlLogger.warn(undefined, "browser control relay input invalid", {
+              ...requestContext,
+              issues: parsed.error.issues.map((issue) => `${issue.path.join(".")}: ${issue.message}`),
+            });
+            await respondRelayFailure("browser control list input failed host validation");
+            return;
+          }
+          warnIfRemoteSessionIdImplausible(parsed.data.remoteSessionId, requestContext);
+          result = { browsers: await relay.list(parsed.data) };
+        } else {
+          const parsed = zcodeBrowserExecuteParamsSchema.safeParse(request.input);
+          if (!parsed.success) {
+            browserControlLogger.warn(undefined, "browser control relay input invalid", {
+              ...requestContext,
+              issues: parsed.error.issues.map((issue) => `${issue.path.join(".")}: ${issue.message}`),
+            });
+            await respondRelayFailure("browser control execute input failed host validation");
+            return;
+          }
+          warnIfRemoteSessionIdImplausible(parsed.data.remoteSessionId, requestContext);
+          result = await relay.execute(parsed.data);
+        }
+        await params.connectionServices.zcodeAgentService.respondBrowserControl({
+          requestId: request.requestId,
+          result,
+        });
+        browserControlLogger.debug(undefined, "browser control host response sent", {
+          ...requestContext,
+          durationMs: Math.max(0, Date.now() - startedAt),
+        });
+      })().catch(async (error: unknown) => {
+        const message = error instanceof Error ? error.message : String(error);
+        browserControlLogger.warn(undefined, "browser control host relay failed", {
+          ...requestContext,
+          durationMs: Math.max(0, Date.now() - startedAt),
+          error: message,
+        });
+        // 中继已失败时 respond 也可能失败（transport 断开）；两次都只记日志，不重试。
+        await respondRelayFailure(message).catch((respondError: unknown) => {
+          browserControlLogger.warn(undefined, "browser control relay failure respond failed", {
+            ...requestContext,
+            error:
+              respondError instanceof Error ? respondError.message : String(respondError),
+          });
+        });
+      });
+    });
+  }
+
   return services;
 }
