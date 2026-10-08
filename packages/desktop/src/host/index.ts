@@ -1728,6 +1728,11 @@ async function createWindowRemoteConnectionHandle(params: {
     runtimePreferencesBridge: {
       onError: (error: unknown) => logger.warn("remote runtime preferences bridge failed", error),
     },
+    // Tier 3a browser 桥：远端 agent 的 browser 命令经 stdio 中继到桌面 IAB（见上方 bridge）。
+    browserControlRelay: browserControlMainBridge,
+    // Defense-in-depth：请求里的 remoteSessionId 应当是本窗口已登记的 logical session。
+    isPlausibleRemoteSessionId: (remoteSessionId) =>
+      windowRemoteConnectionRegistry.getSession(remoteSessionId) !== null,
   });
 
   let disposed = false;

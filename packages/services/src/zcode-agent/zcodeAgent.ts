@@ -336,6 +336,17 @@ export interface ZCodeAgentRespondSessionRuntimePreferencesParams {
     | { status: "failed"; message: string };
 }
 
+export interface ZCodeAgentBrowserControlRequest {
+  requestId: string;
+  kind: "list" | "execute";
+  input: Record<string, unknown>; // browserList/browserExecute params, JSON-serializable
+}
+
+export interface ZCodeAgentRespondBrowserControlParams {
+  requestId: string;
+  result: Record<string, unknown>; // BrowserCommandResult or {browsers:[...]}, validated on respond
+}
+
 export interface ZCodeAgentSessionSubscribeParams extends ZCodeAgentSessionTarget {
   deliveryKind: ZCodeDeliveryKind;
   afterSeq?: number;
@@ -708,6 +719,8 @@ export interface IZCodeAgentService {
     params: ZCodeAgentRespondSessionRuntimePreferencesParams,
   ): Promise<void>;
   onDynamicSessionRuntimePreferencesRequest(): Event<ZCodeAgentSessionRuntimePreferencesRequest>;
+  respondBrowserControl(params: ZCodeAgentRespondBrowserControlParams): Promise<void>;
+  onDynamicBrowserControlRequest(): Event<ZCodeAgentBrowserControlRequest>;
   /**
    * CLI 进程级资源样本，带 services 打的 lane 标签（CLI 自己不知道 lane）。
    * 使用 dynamic event 避免 RPC 服务在无人订阅时缓冲周期事件；
