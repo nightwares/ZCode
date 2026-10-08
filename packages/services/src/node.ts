@@ -1374,6 +1374,8 @@ export function createLocalServices(options: {
       command: BrowserCommand;
     }): Promise<{ ok: boolean; [k: string]: unknown }>;
   };
+  /** browser 控制权威：desktop-attached remote 传 "external"，把 browser 命令中继给桌面 Host 的 IAB。 */
+  browserControlAuthority?: "local" | "external";
   /** Windows desktop-local Host 的 CUA turn 状态投影；其它 authority 会在装配层拒绝。 */
   cuaOperationStateReporter?: CuaOperationStateReporter;
 }): ServiceCollection {
@@ -2118,6 +2120,9 @@ export function createLocalServices(options: {
     spawnFallbackCwd: options?.zcodeAgentSpawnFallbackCwd,
     // browser-use：host→main 执行桥透传给 agent service 的 onRequest browserExecute 路由。
     browserControlExecutor: options?.browserControlExecutor,
+    // Tier 3a：desktop-attached remote 容器内没有 main/IAB，browser 控制权威交给桌面
+    // Host——远端不注入执行器时 agent service 会经 dynamic event 中继（仿 prefs 桥）。
+    browserControlAuthority: isDesktopAttachedRemote ? ("external" as const) : undefined,
     // 官方 Server MCP 身份头：host 是唯一身份权威，Agent 经反向请求索取。
     // Provider 存在性读取正式 Model Selection View；不恢复旧 Provider Snapshot。
     officialMcpAuthHeadersResolver: createOfficialMcpAuthHeadersResolver({

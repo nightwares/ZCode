@@ -34,6 +34,9 @@ import {
   zcodePermissionRequestParamsSchema,
   zcodeBrowserListParamsSchema,
   zcodeBrowserExecuteParamsSchema,
+  browserBackendListResultSchema,
+  browserCommandResultSchema,
+  type BrowserBackendDescriptor,
   zcodePluginsConfigureResultSchema,
   zcodePluginsInstallResultSchema,
   zcodePluginsListResultSchema,
@@ -162,6 +165,8 @@ import type {
   ZCodeAgentReadSessionParams,
   ZCodeAgentRemovePluginMarketplaceParams,
   ZCodeAgentRespondSessionRuntimePreferencesParams,
+  ZCodeAgentRespondBrowserControlParams,
+  ZCodeAgentBrowserControlRequest,
   ZCodeAgentResumeSessionParams,
   ZCodeAgentSendPromptParams,
   ZCodeAgentServiceEvent,
@@ -328,6 +333,11 @@ const PLUGIN_MANAGEMENT_REQUEST_TIMEOUT_MS = 5 * 60_000;
 const CHILD_PROCESSES_REQUEST_TIMEOUT_MS = 800;
 const PLUGIN_OPERATION_CANCEL_REQUEST_TIMEOUT_MS = 5_000;
 const SESSION_COMPACT_REQUEST_TIMEOUT_MS = 5 * 60_000;
+/**
+ * browser 控制中继（authority=external）等待 desktop Host 应答的预算。IAB 命令在
+ * Host 侧还有自己的 30s transport 预算，180s 只兜 Host 连接级故障，正常远不会触达。
+ */
+const BROWSER_CONTROL_RELAY_TIMEOUT_MS = 180_000;
 
 interface PendingPermissionRequest {
   client: ZCodeProtocolClient;
@@ -343,6 +353,17 @@ interface PendingSessionRuntimePreferencesRequest extends PendingPermissionReque
   request: ZCodeAgentSessionRuntimePreferencesRequest;
   timeout: ReturnType<typeof setTimeout>;
   workspaceKey: string;
+}
+
+/**
+ * browser 控制中继 pending：requestId 是 Host 应答与 Promise 的 correlation key，
+ * settle 只能经 takePendingBrowserControl 取出后调用一次（超时/应答/Dispose 互斥结算）。
+ */
+interface PendingBrowserControlRequest {
+  request: ZCodeAgentBrowserControlRequest;
+  timeout: ReturnType<typeof setTimeout>;
+  startedAt: number;
+  settle: (result: Record<string, unknown>) => void;
 }
 
 type SessionCreateCompatField =
@@ -901,6 +922,13 @@ interface CreateZCodeAgentServiceOptions extends Omit<
    */
   browserControlExecutor?: BrowserAmbientContextExecutor;
   /**
+   * browser 控制的执行权威。缺省 "local"：命令由上面注入的 executor 在本进程侧执行。
+   * "external"（desktop-attached remote）：远端容器内没有 IAB/main，executor 缺省时
+   * 自动降级为中继执行器——经 onDynamicBrowserControlRequest 转发给 desktop Host 的
+   * in-app browser，Host 用 respondBrowserControl 回传结果（仿 session-runtime-preferences 桥）。
+   */
+  browserControlAuthority?: "local" | "external";
+  /**
    * 官方 Server MCP 身份头解析器。Agent 进程不持有用户身份权威，
    * 经 interaction/requestOfficialMcpAuthHeaders 向 host 索取本次请求的身份头。
    *
@@ -1122,6 +1150,7 @@ export function createZCodeAgentService(
   }
   const sessionRuntimePreferencesRequestEmitter =
     new Emitter<ZCodeAgentSessionRuntimePreferencesRequest>();
+  const browserControlRequestEmitter = new Emitter<ZCodeAgentBrowserControlRequest>();
   const processResourceSampleEmitter = new Emitter<AgentLaneResourceSample>();
   const toolExecResourceEmitter = new Emitter<ZCodeToolExecResource>();
   const mcpResourceSamplesEmitter = new Emitter<ZCodeMcpResourceSample[]>();
@@ -1174,6 +1203,7 @@ export function createZCodeAgentService(
     string,
     PendingSessionRuntimePreferencesRequest
   >();
+  const pendingBrowserControl = new Map<string, PendingBrowserControlRequest>();
   const activeClientsByWorkspaceKey = new Map<string, ActiveWorkspaceClient>();
   const interactionPreferenceSyncByWorkspaceKey = new Map<string, Promise<void>>();
   let latestAppRuntimePreferences: ZCodeAgentAppRuntimePreferences | undefined;
@@ -1202,6 +1232,13 @@ export function createZCodeAgentService(
   const modelSelectionReadinessSource = options?.modelSelectionReadinessSource;
   const sessionRuntimePreferencesAuthority = options?.sessionRuntimePreferencesAuthority ?? "local";
   const resolveSessionRuntimePreferences = options?.resolveSessionRuntimePreferences;
+  const browserControlAuthority = options?.browserControlAuthority ?? "local";
+  // Tier 3a browser 桥：authority=external（desktop-attached remote）时容器内没有 main/IAB，
+  // 未注入本地 executor 就降级为中继执行器，把 browser 命令经 dynamic event 转发给
+  // desktop Host 的 in-app browser——与 session-runtime-preferences 桥同一模式。
+  const browserControlExecutor =
+    options?.browserControlExecutor ??
+    (browserControlAuthority === "external" ? createRelayBrowserControlExecutor() : undefined);
 
   function invalidateWorkspaceClient(workspaceKey: string, client: ZCodeProtocolClient): void {
     for (const [key, pending] of pendingPermissions) {
@@ -1357,6 +1394,117 @@ export function createZCodeAgentService(
           sessionId: pending.request.sessionId,
         });
       });
+  }
+
+  function takePendingBrowserControl(
+    requestId: string,
+  ): PendingBrowserControlRequest | undefined {
+    const pending = pendingBrowserControl.get(requestId);
+    if (!pending) {
+      return undefined;
+    }
+    pendingBrowserControl.delete(requestId);
+    clearTimeout(pending.timeout);
+    return pending;
+  }
+
+  /** 中继失败（超时/Dispose）的统一结算：list 退化为空列表，execute 报 uncertain 错误。 */
+  function settleBrowserControlRelayFailure(
+    pending: PendingBrowserControlRequest,
+    error: { code: "timeout" | "backend_unavailable"; message: string },
+  ): void {
+    pending.settle(
+      pending.request.kind === "list"
+        ? { browsers: [] }
+        : {
+            ok: false,
+            error: { ...error, sideEffect: "uncertain" },
+            elapsedMs: Date.now() - pending.startedAt,
+          },
+    );
+  }
+
+  function expireBrowserControlRequest(requestId: string): void {
+    const pending = takePendingBrowserControl(requestId);
+    if (!pending) {
+      return;
+    }
+    // Host transport 断开或设置侧不再应答时，必须结束本地等待；命令是否已在
+    // 桌面 IAB 执行无法证明，按操作结果契约标记 uncertain，不谎报成无副作用。
+    logger.warn(undefined, "browser 控制请求等待 Host 响应超时", {
+      event: "zcode_agent.browser_control.host_response_timeout",
+      module: "services.zcode_agent",
+      kind: pending.request.kind,
+      requestId,
+      timeoutMs: BROWSER_CONTROL_RELAY_TIMEOUT_MS,
+    });
+    settleBrowserControlRelayFailure(pending, {
+      code: "timeout",
+      message: `browser control request timed out after ${BROWSER_CONTROL_RELAY_TIMEOUT_MS}ms`,
+    });
+  }
+
+  function registerPendingBrowserControl(
+    request: ZCodeAgentBrowserControlRequest,
+    settle: (result: Record<string, unknown>) => void,
+  ): void {
+    pendingBrowserControl.set(request.requestId, {
+      request,
+      timeout: setTimeout(
+        () => expireBrowserControlRequest(request.requestId),
+        BROWSER_CONTROL_RELAY_TIMEOUT_MS,
+      ),
+      startedAt: Date.now(),
+      settle,
+    });
+    logger.info(undefined, "browser 控制请求已转发给 Host", {
+      event: "zcode_agent.browser_control.host_request_dispatched",
+      module: "services.zcode_agent",
+      kind: request.kind,
+      requestId: request.requestId,
+    });
+    browserControlRequestEmitter.fire(request);
+  }
+
+  function createRelayBrowserControlExecutor(): BrowserAmbientContextExecutor {
+    return {
+      list(input) {
+        return new Promise((resolve, reject) => {
+          // requestId 是 Host 应答与 Promise 的 correlation key；同 key 重复登记会让
+          // 迟到应答错误配对新 Promise，必须在转发前失败（仿 main bridge 的 pending 守卫）。
+          if (pendingBrowserControl.has(input.requestId)) {
+            reject(new Error(`browser requestId '${input.requestId}' is already running`));
+            return;
+          }
+          registerPendingBrowserControl(
+            {
+              requestId: input.requestId,
+              kind: "list",
+              input: input as unknown as Record<string, unknown>,
+            },
+            // respondBrowserControl 已用 browserBackendDescriptorSchema 校验过 result.browsers。
+            (result) => resolve(result.browsers as BrowserBackendDescriptor[]),
+          );
+        });
+      },
+      execute(input) {
+        return new Promise((resolve, reject) => {
+          if (pendingBrowserControl.has(input.requestId)) {
+            reject(new Error(`browser requestId '${input.requestId}' is already running`));
+            return;
+          }
+          registerPendingBrowserControl(
+            {
+              requestId: input.requestId,
+              kind: "execute",
+              input: input as unknown as Record<string, unknown>,
+            },
+            // respondBrowserControl 已用 browserCommandResultSchema 校验过 result。
+            (result) => resolve(result as { ok: boolean } & Record<string, unknown>),
+          );
+        });
+      },
+    };
   }
 
   let modelSelectionSubscription = modelSelectionReadinessSource?.onDidChange?.((view) => {
@@ -2409,7 +2557,7 @@ export function createZCodeAgentService(
             });
             return;
           }
-          const executor = options?.browserControlExecutor;
+          const executor = browserControlExecutor;
           if (!executor) {
             void client.respond(request.id, { browsers: [] });
             return;
@@ -2439,7 +2587,7 @@ export function createZCodeAgentService(
             });
             return;
           }
-          const executor = options?.browserControlExecutor;
+          const executor = browserControlExecutor;
           if (!executor) {
             void client.respond(request.id, {
               ok: false,
@@ -3198,6 +3346,7 @@ export function createZCodeAgentService(
     }
     sessionEmitters.clear();
     sessionRuntimePreferencesRequestEmitter.dispose();
+    browserControlRequestEmitter.dispose();
     processResourceSampleEmitter.dispose();
     mcpTelemetryEmitter.dispose();
     toolExecResourceEmitter.dispose();
@@ -3232,6 +3381,16 @@ export function createZCodeAgentService(
       clearTimeout(pending.timeout);
     }
     pendingSessionRuntimePreferences.clear();
+    // 仿 main bridge dispose：直接 clear 会让所有 await 中的中继调用永久悬空；
+    // 命令是否已在桌面 IAB 执行不可判定，按 backend_unavailable + uncertain 收口。
+    for (const pending of pendingBrowserControl.values()) {
+      clearTimeout(pending.timeout);
+      settleBrowserControlRelayFailure(pending, {
+        code: "backend_unavailable",
+        message: "browser control relay disposed while command was pending",
+      });
+    }
+    pendingBrowserControl.clear();
     activeClientsByWorkspaceKey.clear();
     cancelAllWaitingWorkspaceStartups();
     interactionPreferenceSyncByWorkspaceKey.clear();
@@ -4434,7 +4593,7 @@ export function createZCodeAgentService(
       const logTraceId = sessionTraceId ?? params.inputId;
       const browserAmbientContext =
         params.browserAmbientContext ??
-        (await collectBrowserAmbientContext(options?.browserControlExecutor, {
+        (await collectBrowserAmbientContext(browserControlExecutor, {
           sessionId: params.sessionId,
           workspacePath: params.workspacePath,
           ...(params.workspaceIdentity ? { workspaceIdentity: params.workspaceIdentity } : {}),
@@ -4740,6 +4899,52 @@ export function createZCodeAgentService(
       return (listener) => {
         const disposable = sessionRuntimePreferencesRequestEmitter.event(listener);
         for (const pending of pendingSessionRuntimePreferences.values()) {
+          listener(pending.request);
+        }
+        return disposable;
+      };
+    },
+
+    async respondBrowserControl(
+      params: ZCodeAgentRespondBrowserControlParams,
+    ): Promise<void> {
+      const pending = takePendingBrowserControl(params.requestId);
+      if (!pending) {
+        // 未知 requestId 只记日志：迟到应答/重复应答不能中断服务，也不允许二次结算。
+        logger.warn(undefined, "browser 控制响应找不到 pending 请求", {
+          event: "zcode_agent.browser_control.response_without_pending",
+          module: "services.zcode_agent",
+          requestId: params.requestId,
+        });
+        return;
+      }
+      // 与协议 result 同源校验：list 应答必须是 {browsers:[...]}，execute 应答必须是
+      // browserCommandResultSchema。Host 侧 relay 失败（如 relay_failed 错误壳）会落到
+      // 非法分支，按中继失败结算而不是把未校验结构透传给 agent。
+      const parsed =
+        pending.request.kind === "list"
+          ? browserBackendListResultSchema.safeParse(params.result)
+          : browserCommandResultSchema.safeParse(params.result);
+      if (!parsed.success) {
+        logger.warn(undefined, "Host 返回 browser 控制结果格式非法", {
+          event: "zcode_agent.browser_control.invalid_host_result",
+          module: "services.zcode_agent",
+          kind: pending.request.kind,
+          requestId: params.requestId,
+        });
+        settleBrowserControlRelayFailure(pending, {
+          code: "backend_unavailable",
+          message: "browser control relay returned an invalid result",
+        });
+        return;
+      }
+      pending.settle(parsed.data as unknown as Record<string, unknown>);
+    },
+
+    onDynamicBrowserControlRequest() {
+      return (listener) => {
+        const disposable = browserControlRequestEmitter.event(listener);
+        for (const pending of pendingBrowserControl.values()) {
           listener(pending.request);
         }
         return disposable;
@@ -5083,7 +5288,7 @@ export function createZCodeAgentService(
       if (envelope.type === "sendText" && envelope.sessionId) {
         const payload = commandPayloadSchemas.sendText.parse(envelope.payload);
         const browserAmbientContext = await collectBrowserAmbientContext(
-          options?.browserControlExecutor,
+          browserControlExecutor,
           {
             sessionId: envelope.sessionId,
             workspacePath: params.workspacePath,
