@@ -4,6 +4,7 @@ import { IZCodeTaskService } from "@zcode/services";
 import {
   AutomationRepo,
   createLocalServices,
+  isSessionMissingDispatchError,
   settleCronRunTerminalOutcome,
   settleManualDispatchFailureBestEffort,
   startManualClaimHeartbeat,
@@ -53,7 +54,7 @@ export function createManualAutomationDispatcher(
     let claimHeartbeat: { dispose(): void } | null = null;
 
     try {
-      const task = automation.targetTaskId
+      let task = automation.targetTaskId
         ? { taskId: automation.targetTaskId }
         : await zcodeTaskService.createTask({
             workspacePath: automation.workspacePath,
@@ -65,14 +66,33 @@ export function createManualAutomationDispatcher(
           });
       if (automation.targetTaskId) {
         // 绑定会话通常不处于 active；与 desktop 派发一致，先恢复再应用运行参数。
-        await zcodeTaskService.resumeTask({
-          taskId: task.taskId,
-          workspacePath: automation.workspacePath,
-          workspaceIdentity: automation.workspaceIdentity ?? undefined,
-          model: formatModelPickerValue(automation.modelSelection),
-          thoughtLevel: automation.modelSelection?.options?.reasoningLevel,
-          automationId: automation.automationId,
-        });
+        try {
+          await zcodeTaskService.resumeTask({
+            taskId: task.taskId,
+            workspacePath: automation.workspacePath,
+            workspaceIdentity: automation.workspaceIdentity ?? undefined,
+            model: formatModelPickerValue(automation.modelSelection),
+            thoughtLevel: automation.modelSelection?.options?.reasoningLevel,
+            automationId: automation.automationId,
+          });
+        } catch (error) {
+          if (!isSessionMissingDispatchError(error)) throw error;
+          // 绑定会话被删除：自动新建会话并重绑（与 desktop 派发同一自愈语义）。
+          logWarn(
+            `automation 绑定会话已不存在，自动重建并重绑 automation=${automation.automationId} oldTaskId=${automation.targetTaskId}`,
+            error,
+          );
+          const replacement = await zcodeTaskService.createTask({
+            workspacePath: automation.workspacePath,
+            workspaceIdentity: automation.workspaceIdentity ?? undefined,
+            model: formatModelPickerValue(automation.modelSelection),
+            mode: automation.mode,
+            thoughtLevel: automation.modelSelection?.options?.reasoningLevel,
+            automationId: automation.automationId,
+          });
+          await repo.updateTargetTask(automation.automationId, workspaceKey, replacement.taskId);
+          task = { taskId: replacement.taskId };
+        }
       }
 
       terminalSubscription = zcodeTaskService.onDynamicTaskTerminalOutcome(task.taskId)(

@@ -253,6 +253,7 @@ export { AutomationService, InvalidCronExprError } from "./session/automationSer
 // cron/manual run 的结算原语：desktop host 与远端 server 的手动派发器共用，
 // 避免两份实现漂移。依赖只有 @zcode/shared 类型。
 export {
+  isSessionMissingDispatchError,
   recordCronRunOutcomeBestEffort,
   startManualClaimHeartbeat,
   settleCronRunTerminalOutcome,

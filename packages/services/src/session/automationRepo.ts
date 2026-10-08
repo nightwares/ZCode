@@ -483,6 +483,23 @@ export class AutomationRepo {
    * 编辑定义字段。调用方按需传入重算后的 nextRunAt（改 cron_expr 时）与新的 lifecycleStatus
    * （改 recurring/max_runs 时），仓库不感知 cron 语义。改 cron_expr 时清空 retry 态。
    */
+
+  /** 绑定会话自愈重绑：派发侧发现绑定会话被删除后，新建会话并原子重绑。 */
+  async updateTargetTask(
+    automationId: string,
+    workspaceKey: string,
+    targetTaskId: string | null,
+  ): Promise<void> {
+    await this.ensureReady();
+    const db = this.db;
+    if (!db) {
+      throw new Error("AutomationRepo database is not ready.");
+    }
+    db.prepare(
+      "UPDATE automations SET target_task_id = @targetTaskId, updated_at = @updatedAt WHERE automation_id = @automationId AND workspace_key = @workspaceKey",
+    ).run({ automationId, workspaceKey, targetTaskId, updatedAt: Date.now() });
+  }
+
   async update(
     automationId: string,
     params: ZCodeAutomationUpdateParams,
@@ -527,6 +544,8 @@ export class AutomationRepo {
           : params.scheduleEditedByUser
             ? 1
             : 0,
+      target_task_id:
+        params.targetTaskId === undefined ? existing.target_task_id : params.targetTaskId,
       next_run_at: options?.nextRunAt === undefined ? existing.next_run_at : options.nextRunAt,
       lifecycle_status: options?.lifecycleStatus ?? existing.lifecycle_status,
       dispatch_attempts: options?.resetRetry ? 0 : existing.dispatch_attempts,

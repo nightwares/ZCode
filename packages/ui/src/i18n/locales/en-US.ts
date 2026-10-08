@@ -6480,6 +6480,8 @@ const enUS: Record<string, string> = {
   "automations.moreIdeas": "Scheduled task template",
   "automations.templates.unavailable": "No templates available",
   "automations.runNow": "Run now",
+  "automations.unbindSession": "Unbind session",
+  "automations.sessionUnbound": "Session unbound — each run now creates a new session",
   "automations.runNowQueued": "Triggered — starting soon",
   "automations.runNowAlreadyRunning": "A run is already in progress",
   "automations.runNowFailed": "Could not trigger run",

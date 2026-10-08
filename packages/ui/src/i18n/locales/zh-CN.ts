@@ -6169,6 +6169,8 @@ const zhCN: Record<string, string> = {
   "automations.moreIdeas": "定时任务模板",
   "automations.templates.unavailable": "无可用模板",
   "automations.runNow": "立即运行",
+  "automations.unbindSession": "解绑会话",
+  "automations.sessionUnbound": "已解绑会话——后续每次运行创建新会话",
   "automations.runNowQueued": "已触发，即将运行",
   "automations.runNowAlreadyRunning": "上一条正在运行中，请稍后再试",
   "automations.runNowFailed": "触发运行失败",
