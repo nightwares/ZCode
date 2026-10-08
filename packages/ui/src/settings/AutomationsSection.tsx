@@ -9,7 +9,7 @@ import {
   type ComponentType,
   type SVGProps,
 } from "react";
-import { CircleCheck, RotateCcw, TriangleAlert } from "lucide-react";
+import { CircleCheck, RotateCcw, TriangleAlert, Unlink } from "lucide-react";
 import {
   AUTOMATION_CREATE_LIMIT,
   BUILTIN_MODEL_PROVIDER_IDS,
@@ -393,6 +393,7 @@ interface AutomationActionsMenuProps {
   canRestart: boolean;
   canToggle: boolean;
   onRunNow: (automation: ZCodeAutomation) => void;
+  onUnbindSession: (automation: ZCodeAutomation) => void;
   onEdit: (automation: ZCodeAutomation) => void;
   onToggle: (automation: ZCodeAutomation, enabled: boolean) => void;
   onRestart: (automation: ZCodeAutomation) => void;
@@ -405,6 +406,7 @@ function AutomationActionsMenu({
   canRestart,
   canToggle,
   onRunNow,
+  onUnbindSession,
   onEdit,
   onToggle,
   onRestart,
@@ -446,6 +448,18 @@ function AutomationActionsMenu({
           </span>
           {intl.formatMessage({ id: "automations.runNow" })}
         </DropdownMenuItem>
+        {automation.targetTaskId?.trim() ? (
+          <DropdownMenuItem
+            className="gap-1"
+            disabled={busy}
+            onSelect={() => void onUnbindSession(automation)}
+          >
+            <span className="flex size-5 items-center justify-center">
+              <Unlink className="size-4" strokeWidth={1.33} aria-hidden="true" />
+            </span>
+            {intl.formatMessage({ id: "automations.unbindSession" })}
+          </DropdownMenuItem>
+        ) : null}
         {canRestart ? (
           <DropdownMenuItem
             className="gap-1"
@@ -1120,6 +1134,23 @@ export function AutomationsSection({
       else setNow(Date.now());
     },
     [intl, restartAutomation, zcodeAgentService],
+  );
+
+  const handleUnbindSession = useCallback(
+    async (automation: ZCodeAutomation) => {
+      const ok = await updateAutomation(
+        automation.automationId,
+        { targetTaskId: null },
+        zcodeAgentService,
+      );
+      toast(
+        intl.formatMessage({
+          id: ok ? "automations.sessionUnbound" : "automations.runNowFailed",
+        }),
+        { variant: ok ? "default" : "warning" },
+      );
+    },
+    [intl, updateAutomation, zcodeAgentService],
   );
 
   const handleRunNow = useCallback(
@@ -1815,6 +1846,7 @@ export function AutomationsSection({
                                 canRestart={canRestart}
                                 canToggle={canToggle}
                                 onRunNow={handleRunNow}
+                                onUnbindSession={handleUnbindSession}
                                 onEdit={(target) => setView({ mode: "edit", automation: target })}
                                 onToggle={handleToggle}
                                 onRestart={handleRestart}

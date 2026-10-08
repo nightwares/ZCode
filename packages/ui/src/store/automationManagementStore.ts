@@ -49,6 +49,8 @@ export interface UpdateAutomationInput {
   recurring?: boolean;
   maxRuns?: number | null;
   endAt?: number | null;
+  /** null=解绑会话：后续每次运行创建新会话。 */
+  targetTaskId?: string | null;
   scheduleRule?: ZCodeAutomationScheduleRule | null;
   scheduleEditedByUser?: boolean;
 }
