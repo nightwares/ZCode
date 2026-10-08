@@ -130,6 +130,7 @@ import { runHostShutdownPhases, type HostShutdownResult } from "./hostShutdownPh
 import { initializeHostApiNetworkTransportOwner } from "./hostInitialization.js";
 import { createHostUncaughtExceptionHandler } from "./hostUncaughtExceptionGuard.js";
 import {
+  isSessionMissingDispatchError,
   recordCronRunOutcomeBestEffort,
   startManualClaimHeartbeat,
   settleCronRunTerminalOutcome,
@@ -885,7 +886,7 @@ async function dispatchCronRun(request: CronRunDispatchRequest): Promise<{
   const trigger = request.runId.includes(":manual:") ? "manual" : "schedule";
   const scheduledAt = parseCronRunScheduledAt(request.runId, request.automationId);
   try {
-    const task = request.targetTaskId
+    let task = request.targetTaskId
       ? { taskId: request.targetTaskId }
       : await zcodeTaskService.createTask({
           workspacePath: request.workspacePath,
@@ -902,21 +903,44 @@ async function dispatchCronRun(request: CronRunDispatchRequest): Promise<{
     if (request.targetTaskId) {
       // 绑定会话在 app 重启或切换 workspace 后通常不处于 active；旧实现直接
       // setConfig/sendPrompt 会立即报 Session is not active，看起来像「立即运行」没有触发。
-      await zcodeTaskService.resumeTask({
-        taskId: task.taskId,
-        workspacePath: request.workspacePath,
-        workspaceIdentity: request.workspaceIdentity,
-        model: formatModelPickerValue(submissionModelSelection),
-        thoughtLevel: submissionModelSelection.options?.reasoningLevel,
-        automationId: request.automationId,
-      });
-      await applyCronRunConfigToExistingTask({
-        zcodeTaskService,
-        taskId: task.taskId,
-        traceId: promptTraceId,
-        modelSelection: submissionModelSelection,
-        mode: request.mode,
-      });
+      try {
+        await zcodeTaskService.resumeTask({
+          taskId: task.taskId,
+          workspacePath: request.workspacePath,
+          workspaceIdentity: request.workspaceIdentity,
+          model: formatModelPickerValue(submissionModelSelection),
+          thoughtLevel: submissionModelSelection.options?.reasoningLevel,
+          automationId: request.automationId,
+        });
+        await applyCronRunConfigToExistingTask({
+          zcodeTaskService,
+          taskId: task.taskId,
+          traceId: promptTraceId,
+          modelSelection: submissionModelSelection,
+          mode: request.mode,
+        });
+      } catch (error) {
+        if (!isSessionMissingDispatchError(error)) throw error;
+        // 绑定会话已被用户删除：旧实现会从此每夜静默失败。这里自动新建会话并原子重绑，
+        // 运行记录照常落盘，用户在管理页可看到新绑定的会话。
+        logger.warn(
+          `automation 绑定会话已不存在，自动重建并重绑 automation=${request.automationId} oldTaskId=${request.targetTaskId}`,
+        );
+        const replacement = await zcodeTaskService.createTask({
+          workspacePath: request.workspacePath,
+          workspaceIdentity: request.workspaceIdentity,
+          model: formatModelPickerValue(submissionModelSelection),
+          mode: request.mode,
+          thoughtLevel: submissionModelSelection.options?.reasoningLevel,
+          automationId: request.automationId,
+        });
+        await cronAutomationRepo.updateTargetTask(
+          request.automationId,
+          workspaceKey,
+          replacement.taskId,
+        );
+        task = { taskId: replacement.taskId };
+      }
     }
     const botsService = targetServices.getOptional(IBotsService);
     if (botsService) {

@@ -125,3 +125,9 @@ export async function settleCronRunTerminalOutcome(
   if (params.trigger !== "manual") return;
   await releaseManualClaimBestEffort(params);
 }
+
+/** 与 zcodeTaskServiceAdapter 的会话缺失判定同口径；派发侧自愈重建会话时使用。 */
+export function isSessionMissingDispatchError(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error ?? "");
+  return /\bSession (not found|is not active):/i.test(message);
+}
