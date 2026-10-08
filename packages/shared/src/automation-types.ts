@@ -199,4 +199,9 @@ export interface ZCodeAutomationUpdateParams {
   interval?: number;
   /** 仅由管理页在用户实际修改调度时写入；undefined=保留原来源状态。 */
   scheduleEditedByUser?: boolean;
+  /**
+   * undefined=不修改；null=解绑会话（后续每次运行创建新会话）。
+   * 绑定会话被删除时派发侧会自动重建会话并重绑，此字段用于用户显式解绑。
+   */
+  targetTaskId?: string | null;
 }
