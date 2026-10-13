@@ -31,6 +31,9 @@ import {
   IPluginSyncService,
   IPluginsService,
   IPluginManagementService,
+  IPluginUiBridgeService,
+  IPluginUiSamplingService,
+  IPluginUiAppToolsService,
   ISubagentsService,
   ICommandsService,
   IHooksService,
@@ -86,8 +89,14 @@ import {
   type ZCodeBrowserExecuteParams,
   zcodeBrowserListParamsSchema,
   zcodeBrowserExecuteParamsSchema,
+  hostPluginSandboxRegisterRequestResponseSchema,
   ZAI_PROVIDER_ID,
 } from "@zcode/shared";
+import type {
+  PluginSandboxHandle,
+  PluginSandboxRegisterInput,
+  PluginSandboxRegisterResultPayload,
+} from "@zcode/shared/mcp-apps";
 import { assertLegacyRemoteWorkspaceRpcContract } from "./legacyRemoteWorkspaceRpcContract.js";
 import {
   createRemoteProviderProvisioningExecutorFromWorkspace,
@@ -96,6 +105,7 @@ import {
 
 const runtimePreferencesLogger = createServiceLogger("remote-runtime-preferences");
 const browserControlLogger = createServiceLogger("remote-browser-control");
+const pluginSandboxLogger = createServiceLogger("remote-plugin-sandbox");
 const ZCODE_JWT_TOKEN_KEY = "zcodejwttoken";
 const conversationShareLog = createServiceLogger("conversation-share");
 
@@ -133,6 +143,16 @@ export function createRemoteWorkspaceServiceCollection(params: {
   browserControlRelay: {
     list(input: ZCodeBrowserListParams): Promise<BrowserBackendDescriptor[]>;
     execute(input: ZCodeBrowserExecuteParams): Promise<BrowserCommandResult>;
+  };
+  /**
+   * 插件 UI 沙箱登记中继（MCP Apps for remote）：远端（stdio）Host 没有 Electron main，
+   * prepareSandbox 的登记请求经 IPluginUiBridgeService 动态事件到达这里，转发给本窗口
+   * Host 既有的 pluginSandboxRegistrationBridge（parentPort → main registry；归属校验
+   * ownerWebContentsId === win.webContents.id 在 main 侧完成），句柄原路 respond 回远端。
+   * 形状即 createPluginSandboxRegistrationBridge 返回值的 register。
+   */
+  pluginSandboxRegistration: {
+    register(input: PluginSandboxRegisterInput): Promise<PluginSandboxHandle>;
   };
   /** Defense-in-depth：请求携带的 remoteSessionId 是否像本窗口已登记的 logical session。 */
   isPlausibleRemoteSessionId?: (remoteSessionId: string) => boolean;
@@ -478,6 +498,77 @@ export function createRemoteWorkspaceServiceCollection(params: {
     });
   });
 
+  // 插件 UI 沙箱登记中继（MCP Apps for remote）：远端 prepareSandbox 读资源后拿不到
+  // Electron 沙箱，登记请求经 stdio 到达这里，走本窗口 Host 既有的
+  // pluginSandboxRegistrationBridge 到 main；ownerWebContentsId 归属校验在 main 侧完成，
+  // 这里不重复判定。订阅寿命与 runtime-preferences / browser 桥一致。
+  // 旧版远端 server 不暴露 plugin-ui channel：保持无入口的原行为，不注册不订阅。
+  const remotePluginUiBridgeService = params.connectionServices.pluginUiBridgeService;
+  const remotePluginUiSamplingService = params.connectionServices.pluginUiSamplingService;
+  const remotePluginUiAppToolsService = params.connectionServices.pluginUiAppToolsService;
+  if (remotePluginUiBridgeService) {
+    remotePluginUiBridgeService.onDynamicPluginSandboxRegisterRequest()((request) => {
+      const startedAt = Date.now();
+      const requestContext = {
+        event: "plugin_ui.sandbox_register.host_request_received",
+        module: "desktop.host.remote_workspace",
+        requestId: request.requestId,
+        scopeId: request.input.scopeId,
+      };
+      pluginSandboxLogger.info(undefined, "plugin sandbox host request received", requestContext);
+      const respond = (result: PluginSandboxRegisterResultPayload) =>
+        remotePluginUiBridgeService.respondPluginSandboxRegister(result);
+      void (async () => {
+        // 与 host → main 的 wire schema 同源校验；权威判定仍在 main 侧，这里只挡中继垃圾。
+        const parsed = hostPluginSandboxRegisterRequestResponseSchema.safeParse({
+          type: "plugin-sandbox-register-request",
+          requestId: request.requestId,
+          ...request.input,
+        });
+        if (!parsed.success) {
+          pluginSandboxLogger.warn(undefined, "plugin sandbox relay input invalid", {
+            ...requestContext,
+            issues: parsed.error.issues.map(
+              (issue) => `${issue.path.join(".")}: ${issue.message}`,
+            ),
+          });
+          await respond({
+            requestId: request.requestId,
+            ok: false,
+            error: "plugin sandbox register input failed host validation",
+          });
+          return;
+        }
+        const { type: _type, requestId: _requestId, ...input } = parsed.data;
+        const handle = await params.pluginSandboxRegistration.register(
+          input as PluginSandboxRegisterInput,
+        );
+        await respond({ requestId: request.requestId, ok: true, ...handle });
+        pluginSandboxLogger.debug(undefined, "plugin sandbox host response sent", {
+          ...requestContext,
+          durationMs: Math.max(0, Date.now() - startedAt),
+        });
+      })().catch(async (error: unknown) => {
+        const message = error instanceof Error ? error.message : String(error);
+        pluginSandboxLogger.warn(undefined, "plugin sandbox host relay failed", {
+          ...requestContext,
+          durationMs: Math.max(0, Date.now() - startedAt),
+          error: message,
+        });
+        // 中继已失败时 respond 也可能失败（transport 断开）；两次都只记日志，不重试。
+        await respond({ requestId: request.requestId, ok: false, error: message }).catch(
+          (respondError: unknown) => {
+            pluginSandboxLogger.warn(undefined, "plugin sandbox relay failure respond failed", {
+              ...requestContext,
+              error:
+                respondError instanceof Error ? respondError.message : String(respondError),
+            });
+          },
+        );
+      });
+    });
+  }
+
   // Web 手机远控进入 SSH task 时只连到 remote workspace host，
   // 没有桌面 renderer 那层 `baseServices + remoteServices` 合并。
   // 因此这里为 remote workspace host 补齐本地全局 channel；文件、终端、ZCode Agent 仍来自远端，
@@ -553,6 +644,17 @@ export function createRemoteWorkspaceServiceCollection(params: {
       createSettingsSyncService({ settingService: localSettingService }),
     )
     .register(IPromptAttachmentTransferService, params.promptAttachmentTransferService);
+  // 远端 plugin UI（MCP Apps）：资源读取、实例租约与 UI 工具调用都发生在容器内的 agent；
+  // 沙箱登记经上面的中继回桌面 main，句柄原路回 renderer。三个服务直接透出远端代理。
+  if (remotePluginUiBridgeService) {
+    services.register(IPluginUiBridgeService, remotePluginUiBridgeService);
+    if (remotePluginUiSamplingService) {
+      services.register(IPluginUiSamplingService, remotePluginUiSamplingService);
+    }
+    if (remotePluginUiAppToolsService) {
+      services.register(IPluginUiAppToolsService, remotePluginUiAppToolsService);
+    }
+  }
   registerHostApiNetworkTransportForDispose(services, hostApiNetworkTransport);
   registerRemoteProviderProvisioningExecutor(services, remoteProviderProvisioningService);
   return services;

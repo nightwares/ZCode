@@ -24,6 +24,9 @@ function makeServices(id: string): IServiceAccessor {
     mcpSyncService: { id, service: "mcp-sync" },
     pluginSyncService: { id, service: "plugin-sync" },
     pluginsService: { id, service: "plugins" },
+    pluginUiBridgeService: { id, service: "plugin-ui-bridge" },
+    pluginUiSamplingService: { id, service: "plugin-ui-sampling" },
+    pluginUiAppToolsService: { id, service: "plugin-ui-app-tools" },
     commandsService: { id, service: "commands" },
     hooksService: { id, service: "hooks" },
     clientScenesService: { id, service: "clientScenes" },
@@ -65,6 +68,11 @@ describe("buildRemoteWorkspaceSessionServices", () => {
     expect(merged.pluginSyncService).toBe(remoteServices.pluginSyncService);
     expect(merged.pluginsService).toBe(remoteServices.pluginsService);
     expect(merged.commandsService).toBe(remoteServices.commandsService);
+    // MCP Apps for remote：plugin UI 的资源读取 / 采样 / App-Provided Tools 都发生在
+    // 容器内 agent；renderer 必须拿到远端代理，否则会把远端路径发给本机 host。
+    expect(merged.pluginUiBridgeService).toBe(remoteServices.pluginUiBridgeService);
+    expect(merged.pluginUiSamplingService).toBe(remoteServices.pluginUiSamplingService);
+    expect(merged.pluginUiAppToolsService).toBe(remoteServices.pluginUiAppToolsService);
     // Bug 回归（2026-08-28 用户反馈「点去审核后没有任何待审 Hook」）：SSH 远程工作区的
     // hooksService 曾被 ...baseServices 展开静默回落到本机 host，远程机器上的
     // workspace hooks（含待审项）永远加载不出来。hooks 读写与 trust 授权必须打到远端。

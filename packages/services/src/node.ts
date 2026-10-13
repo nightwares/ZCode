@@ -40,6 +40,12 @@ export {
   type TopicResourcePeers,
 } from "./zcode-agent/topicResourcePeers.js";
 export { createTopicResourceRelayChannel } from "./zcode-agent/topicResourceRelayChannel.js";
+// stdio server 入口（packages/server stdioServices）经 services/node 装配远端服务集合，
+// 沙箱登记中继从这里取工厂。
+export {
+  createPluginSandboxRegistrationRelay,
+  type PluginSandboxRegistrationRelay,
+} from "./plugin-ui-bridge/index.js";
 
 export { createFileService } from "./file/fileService.js";
 export {
@@ -452,6 +458,8 @@ import {
   IPluginUiBridgeService,
   createPluginUiAppToolsService,
   createPluginUiBridgeService,
+  createPluginSandboxRegistrationRelay,
+  type PluginSandboxRegistrationRelay,
 } from "./plugin-ui-bridge/index.js";
 import type { PluginSandboxHandle, PluginSandboxRegisterInput } from "@zcode/shared/mcp-apps";
 import { createPluginSyncService } from "./plugin-sync/pluginSyncService.js";
@@ -1140,6 +1148,11 @@ export function createLocalServices(options: {
   forwardDynamicWorkflowUserMode?: (mode: DynamicWorkflowMode | undefined) => void;
   /** Desktop Host 请求 Main 登记已校验的插件 UI HTML，换取沙箱句柄。 */
   registerPluginSandbox?: (input: PluginSandboxRegisterInput) => Promise<PluginSandboxHandle>;
+  /**
+   * stdio 远端 runtime 的沙箱登记中继：远端 Host 没有 Electron main，prepareSandbox 的
+   * 登记请求经 IPluginUiBridgeService 动态事件转发给 desktop Host 执行后原路回传句柄。
+   */
+  pluginSandboxRegistrationRelay?: PluginSandboxRegistrationRelay;
   feedback?: Partial<
     Omit<CreateFeedbackServiceOptions, "apiClient" | "credentialService" | "oauthService">
   >;
@@ -1564,6 +1577,7 @@ export function createLocalServices(options: {
     unsubscribeMcpResourceForUi: (params) => zcodeAgentService.unsubscribeMcpResourceForUi(params),
     listPluginUiSurfaces: (params) => zcodeAgentService.listPluginUiSurfaces(params),
     registerSandbox: options?.registerPluginSandbox,
+    sandboxRegistrationRelay: options?.pluginSandboxRegistrationRelay,
   });
   // App-Provided Tools：页面工具登记与模型调用的认领 / 回传都发生在 session 所在的 agent 进程。
   const pluginUiSamplingService = createPluginUiSamplingService({
@@ -2625,7 +2639,11 @@ export function createLocalServices(options: {
     .register(IMcpSyncService, mcpSyncService)
     .register(
       IGenUiService,
-      createGenUiService({ registerSandbox: options?.registerPluginSandbox }),
+      // 远端（stdio）runtime 没有本机 registerPluginSandbox，登记同样走中继。
+      createGenUiService({
+        registerSandbox:
+          options?.registerPluginSandbox ?? options?.pluginSandboxRegistrationRelay?.register,
+      }),
     )
     .register(IPluginUiBridgeService, pluginUiBridgeService)
     .register(IPluginUiSamplingService, pluginUiSamplingService)

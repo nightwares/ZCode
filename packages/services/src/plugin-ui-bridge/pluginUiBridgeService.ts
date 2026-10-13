@@ -1,3 +1,4 @@
+import { Event } from "@zcode/rpc";
 import type {
   ZCodeMcpReadResourceResult,
   ZCodeMcpUiCallToolResult,
@@ -11,6 +12,7 @@ import type {
   McpAppResourceMeta,
   PluginSandboxHandle,
   PluginSandboxRegisterInput,
+  PluginSandboxRegisterResultPayload,
 } from "@zcode/shared/mcp-apps";
 import {
   MCP_APPS_HTML_MAX_BYTES,
@@ -21,6 +23,7 @@ import {
 import { createServiceLogger } from "../logger/serviceLogger.js";
 import type {
   IPluginUiBridgeService,
+  PluginSandboxRegisterRelayRequest,
   PluginUiCallToolParams,
   PluginUiCancelToolCallParams,
   PluginUiListResourcesParams,
@@ -29,6 +32,8 @@ import type {
   PluginUiResourceSubscriptionParams,
   PluginUiWorkspaceTarget,
 } from "./contract.js";
+import { PLUGIN_UI_SANDBOX_UNAVAILABLE_MESSAGE } from "./contract.js";
+import type { PluginSandboxRegistrationRelay } from "./sandboxRegistrationRelay.js";
 
 export interface PluginUiBridgeServiceDependencies {
   recycleInstance?: (params: import("./contract.js").PluginUiPluginScope) => Promise<boolean>;
@@ -69,6 +74,11 @@ export interface PluginUiBridgeServiceDependencies {
   subscribeMcpResourceForUi?: (params: PluginUiResourceSubscriptionParams) => Promise<unknown>;
   unsubscribeMcpResourceForUi?: (params: PluginUiResourceSubscriptionParams) => Promise<unknown>;
   registerSandbox?: (input: PluginSandboxRegisterInput) => Promise<PluginSandboxHandle>;
+  /**
+   * stdio 远端 runtime 的登记中继：容器内没有 Electron main，登记请求经动态事件转发给
+   * desktop Host 执行（与 registerSandbox 互斥；两者都注入时优先本机 registerSandbox）。
+   */
+  sandboxRegistrationRelay?: PluginSandboxRegistrationRelay;
   /** 工作区级 `plugins/listUiSurfaces`。 */
   listPluginUiSurfaces?: (
     params: PluginUiWorkspaceTarget,
@@ -108,15 +118,10 @@ export function createPluginUiBridgeService(
     params: PluginUiPrepareSandboxParams,
     instance: import("@zcode/shared/mcp-apps").McpAppInstance,
   ) => {
-    if (
-      !dependencies.readMcpResource ||
-      !dependencies.registerSandbox ||
-      !dependencies.openInstance
-    ) {
-      throw new PluginUiBridgeError(
-        "unavailable",
-        "Plugin UI sandbox is unavailable in this runtime",
-      );
+    const registerSandbox =
+      dependencies.registerSandbox ?? dependencies.sandboxRegistrationRelay?.register;
+    if (!dependencies.readMcpResource || !registerSandbox || !dependencies.openInstance) {
+      throw new PluginUiBridgeError("unavailable", PLUGIN_UI_SANDBOX_UNAVAILABLE_MESSAGE);
     }
     const bound = { ...params, instance };
     const startedAt = Date.now();
@@ -154,7 +159,7 @@ export function createPluginUiBridgeService(
         hasResourceMeta: meta !== null,
         durationMs: Date.now() - startedAt,
       });
-      const handle = await dependencies.registerSandbox({
+      const handle = await registerSandbox({
         instance,
         workspacePath: params.workspacePath,
         ...(params.workspaceIdentity ? { workspaceIdentity: params.workspaceIdentity } : {}),
@@ -265,6 +270,21 @@ export function createPluginUiBridgeService(
       // web / 远程 workspace 没有本地 agent runtime：没有入口而不是报错，launcher 据此隐藏分组。
       if (!dependencies.listPluginUiSurfaces) return [];
       return (await dependencies.listPluginUiSurfaces(params)).surfaces;
+    },
+    onDynamicPluginSandboxRegisterRequest() {
+      // 本地 desktop runtime 没有 Host 侧订阅者，事件恒为空；ProxyChannel 按返回值识别事件方法。
+      const relay = dependencies.sandboxRegistrationRelay;
+      if (!relay) return Event.None as Event<PluginSandboxRegisterRelayRequest>;
+      return (listener) => relay.onRequest(listener);
+    },
+    async respondPluginSandboxRegister(params: PluginSandboxRegisterResultPayload) {
+      if (!dependencies.sandboxRegistrationRelay) {
+        throw new PluginUiBridgeError(
+          "unavailable",
+          "Plugin UI sandbox registration relay is unavailable in this runtime",
+        );
+      }
+      dependencies.sandboxRegistrationRelay.respond(params);
     },
   };
 }

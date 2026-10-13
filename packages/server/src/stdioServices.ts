@@ -1,4 +1,8 @@
-import { createLocalServices, type ZCodeAgentCommandResolver } from "@zcode/services/node";
+import {
+  createLocalServices,
+  createPluginSandboxRegistrationRelay,
+  type ZCodeAgentCommandResolver,
+} from "@zcode/services/node";
 import type { IChannel } from "@zcode/rpc";
 import {
   parseServiceAuthorityMode,
@@ -41,6 +45,10 @@ export function createStdioServices(options: CreateStdioServicesOptions) {
   // 服务集合自身，而集合构造又要求先提供 dispatcher —— 用可变引用打破循环：
   // 构造时注入转发闭包，集合就绪后立刻回填真实实现。
   let dispatchManualRun: ReturnType<typeof createManualAutomationDispatcher> | null = null;
+  // 容器内没有桌面 main / Electron，plugin UI（MCP Apps）的沙箱登记无法在本机完成：
+  // 登记请求经 IPluginUiBridgeService 动态事件中继给 desktop Host（仿 browser-use Tier 3a），
+  // Host 走本窗口 pluginSandboxRegistrationBridge 到 main，句柄原路 respond 回来。
+  const pluginSandboxRegistrationRelay = createPluginSandboxRegistrationRelay();
   // 远程 Desktop 的呈现能力必须从 stdio 入口收到的 authority mode 进入 Services 推导链。
   // 测试注入 resolver 只用于在 spawn 前观察最终命令，不改变生产默认 resolver。
   const services = createLocalServices({
@@ -49,6 +57,7 @@ export function createStdioServices(options: CreateStdioServicesOptions) {
     serviceAuthorityMode: authorityModeParseResult.mode,
     zcodeAgentCommandResolver: options.zcodeAgentCommandResolver,
     remoteAgentNetwork,
+    pluginSandboxRegistrationRelay,
     onAutomationManualRunRequested: (params) => {
       if (!dispatchManualRun) {
         throw new Error("Automation immediate dispatcher is unavailable.");

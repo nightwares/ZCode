@@ -42,6 +42,11 @@ export function buildRemoteWorkspaceSessionServices(
     pluginsService: remoteServices.pluginsService,
     // 设置页插件管理与 pluginsService 同理，必须打到远端（插件目录在远端文件系统）。
     pluginManagementService: remoteServices.pluginManagementService,
+    // 远端 plugin UI（MCP Apps）：资源读取与实例租约在容器内的 agent 进程，
+    // 沙箱登记由远端服务经动态事件中继回桌面 main 执行，renderer 只认这条链路。
+    pluginUiBridgeService: remoteServices.pluginUiBridgeService,
+    pluginUiSamplingService: remoteServices.pluginUiSamplingService,
+    pluginUiAppToolsService: remoteServices.pluginUiAppToolsService,
     commandsService: remoteServices.commandsService,
     // SSH/Docker 工作区的 hooks 声明、信任状态与待审项都位于远端文件系统。
     // hooksService 必须覆盖 baseServices 中的本机服务，否则会用远端路径扫描本机文件系统，
