@@ -360,6 +360,7 @@ export {
 } from "./plugin-ui-bridge/index.js";
 export {
   IPluginUiBridgeService,
+  PLUGIN_UI_SANDBOX_UNAVAILABLE_MESSAGE,
   type PluginUiCallToolParams,
   type PluginUiCallToolResult,
   type PluginUiPrepareSandboxParams,
@@ -372,6 +373,7 @@ export {
   type PluginUiResourceSubscriptionParams,
   type PluginUiSurfaceEntry,
   type PluginUiWorkspaceTarget,
+  type PluginSandboxRegisterRelayRequest,
 } from "./plugin-ui-bridge/contract.js";
 export { IClientConfigService } from "./client-config/clientConfig.js";
 

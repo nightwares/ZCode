@@ -1,6 +1,12 @@
+import type { Event } from "@zcode/rpc";
 import type { ZCodePluginUiSurface } from "@zcode/shared";
 import { ServiceChannels } from "@zcode/shared";
-import type { McpToolUiCsp, PluginSandboxHandle } from "@zcode/shared/mcp-apps";
+import type {
+  McpToolUiCsp,
+  PluginSandboxHandle,
+  PluginSandboxRegisterInput,
+  PluginSandboxRegisterResultPayload,
+} from "@zcode/shared/mcp-apps";
 import { createServiceDescriptor } from "../descriptors.js";
 
 /** 与 zcodeAgentService 其余方法一致的 workspace 定位；身份用 workspaceIdentity，路径用 workspacePath。 */
@@ -97,6 +103,15 @@ export interface PluginUiResourceSubscriptionParams extends PluginUiPluginScope 
 /** 工作区级面板入口（清单 `ui.surfaces[]`），来自 agent `plugins/listUiSurfaces`。 */
 export type PluginUiSurfaceEntry = ZCodePluginUiSurface;
 
+/** 远端（stdio server）把沙箱登记中继给 desktop Host 的请求载荷。 */
+export interface PluginSandboxRegisterRelayRequest {
+  requestId: string;
+  input: PluginSandboxRegisterInput;
+}
+
+/** renderer 侧据此把「runtime 不支持沙箱」降级为 unsupported 呈现而不是报错。 */
+export const PLUGIN_UI_SANDBOX_UNAVAILABLE_MESSAGE = "Plugin UI sandbox is unavailable in this runtime";
+
 /**
  * 插件 UI 桥。UI 只依赖这个描述符，不直接调用 zcodeAgentService（M5 ③-3 平台能力面收敛）。
  * `prepareSandbox` 以 (ownerWebContentsId, workspaceKey, sessionId, pluginId, scopeId) 幂等：重复调用返回同一
@@ -128,6 +143,14 @@ export interface IPluginUiBridgeService {
   unsubscribeResource(params: PluginUiResourceSubscriptionParams): Promise<void>;
   /** 已启用插件的面板入口；插件启停后由 UI 重新拉取（不缓存）。 */
   listSurfaces(params: PluginUiWorkspaceTarget): Promise<PluginUiSurfaceEntry[]>;
+  /**
+   * 远端（stdio server）runtime 的沙箱登记中继：Electron 沙箱只存在于桌面 main，
+   * prepareSandbox 的登记请求经此事件转发给 desktop Host，Host 执行后用
+   * respondPluginSandboxRegister 回传句柄。本地 desktop runtime 从不触发。
+   */
+  onDynamicPluginSandboxRegisterRequest(): Event<PluginSandboxRegisterRelayRequest>;
+  /** desktop Host 应答中继登记；未知 / 重复 requestId 只记日志，不允许二次结算。 */
+  respondPluginSandboxRegister(params: PluginSandboxRegisterResultPayload): Promise<void>;
 }
 
 export const IPluginUiBridgeService = createServiceDescriptor<IPluginUiBridgeService>(

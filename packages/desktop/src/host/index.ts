@@ -2109,6 +2109,12 @@ async function createWindowRemoteConnectionHandle(params: {
     // Defense-in-depth：请求里的 remoteSessionId 应当是本窗口已登记的 logical session。
     isPlausibleRemoteSessionId: (remoteSessionId) =>
       windowRemoteConnectionRegistry.getSession(remoteSessionId) !== null,
+    // MCP Apps 中继：远端 plugin UI 的沙箱登记经 stdio 到达这里，走本窗口既有
+    // pluginSandboxRegistrationBridge（parentPort → main，ownerWebContentsId 归属校验在 main）。
+    pluginSandboxRegistration: pluginSandboxRegistrationBridge,
+    // MCP Apps 中继：远端 plugin UI 的沙箱登记经 stdio 到达这里，走本窗口既有
+    // pluginSandboxRegistrationBridge（parentPort → main，ownerWebContentsId 归属校验在 main）。
+    pluginSandboxRegistration: pluginSandboxRegistrationBridge,
   });
   if (params.target.kind === "server") {
     projectSubscription = connection.services.broadcastService.onMessage((event) => {

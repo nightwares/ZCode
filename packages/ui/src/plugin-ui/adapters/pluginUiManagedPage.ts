@@ -20,6 +20,7 @@ import type {
   McpUiAppCapabilities,
   McpUiHostContext,
 } from "@modelcontextprotocol/ext-apps/app-bridge";
+import { PLUGIN_UI_SANDBOX_UNAVAILABLE_MESSAGE } from "@zcode/services";
 import type { PluginSandboxHandle } from "@zcode/shared/mcp-apps";
 import { buildPluginSandboxScopeId } from "@zcode/shared/mcp-apps";
 import { clearPluginUiSurfaceFeed } from "../app/pluginUiSurfaceFeedStore.js";
@@ -287,6 +288,12 @@ export function createPage(
         });
         if (next === "error") {
           void page.suspend(true);
+          // Runtime 不支持沙箱（server-remote / 旧版远端 server 等）时降级为 unsupported
+          // 呈现，与从未启用时的卡片形态一致，而不是常驻报错。
+          if (detail?.error?.includes(PLUGIN_UI_SANDBOX_UNAVAILABLE_MESSAGE)) {
+            patch({ supported: false, phase: "idle", error: null });
+            return;
+          }
           patch({ phase: "error", error: detail?.error ?? "MCP App failed" });
           return;
         }

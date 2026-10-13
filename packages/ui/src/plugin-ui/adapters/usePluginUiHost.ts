@@ -1,6 +1,5 @@
 import { useOptionalPlatform } from "@/hooks/usePlatform.js";
 import { useOptionalServices } from "@/hooks/useServices.js";
-import { isRemoteWorkspaceIdentity } from "@zcode/shared";
 import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import { buildPluginUiSurfaceKey, PLUGIN_UI_CARD_DEFAULT_HEIGHT_PX } from "../contract.js";
 import { resolvePluginUiLogicalScope } from "../domain/pluginUiLogicalScope.js";
@@ -18,15 +17,15 @@ function pageIdentity(input: UsePluginUiHostInput): { key: string; input: UsePlu
 export function usePluginUiHost(input: UsePluginUiHostInput): UsePluginUiHostResult {
   const platform = useOptionalPlatform();
   const services = useOptionalServices();
-  const local =
-    !input.scope.remoteSessionId && !isRemoteWorkspaceIdentity(input.scope.workspaceIdentity ?? "");
   const identified = pageIdentity(input);
   const key = identified.key;
   const [failure, setFailure] = useState<{ key: string; error: string } | null>(null);
   const empty = useMemo<UsePluginUiHostResult>(
     () => ({
       pageKey: key,
-      supported: Boolean(local && platform?.pluginSandbox && services?.pluginUiBridgeService),
+      // 远程 workspace 的 plugin-ui 服务由 workspace 级 ServiceProvider 路由到远端 Host
+      // （沙箱登记在那里中继回桌面 main）；能力存在即支持，不再按会话本地与否一刀切。
+      supported: Boolean(platform?.pluginSandbox && services?.pluginUiBridgeService),
       phase: failure?.key === key ? "error" : "idle",
       handle: null,
       height: PLUGIN_UI_CARD_DEFAULT_HEIGHT_PX,
@@ -34,7 +33,7 @@ export function usePluginUiHost(input: UsePluginUiHostInput): UsePluginUiHostRes
       appCapabilities: undefined,
       reload: () => setFailure(null),
     }),
-    [key, platform, services, failure, local],
+    [key, platform, services, failure],
   );
   // 创建只发生在 effect；外部 store 的快照身份稳定，不在 render 写入 controller。
   const [subscribe, read] = useMemo(
@@ -47,12 +46,7 @@ export function usePluginUiHost(input: UsePluginUiHostInput): UsePluginUiHostRes
   );
   const result = useSyncExternalStore(subscribe, read, () => empty);
   useEffect(() => {
-    if (
-      !local ||
-      !platform?.pluginSandbox ||
-      !services?.pluginUiBridgeService ||
-      input.enabled === false
-    )
+    if (!platform?.pluginSandbox || !services?.pluginUiBridgeService || input.enabled === false)
       return;
     if (failure?.key === key) return;
     let current = true;

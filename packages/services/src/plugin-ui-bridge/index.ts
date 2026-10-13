@@ -11,3 +11,7 @@ export {
   createPluginUiBridgeService,
   type PluginUiBridgeServiceDependencies,
 } from "./pluginUiBridgeService.js";
+export {
+  createPluginSandboxRegistrationRelay,
+  type PluginSandboxRegistrationRelay,
+} from "./sandboxRegistrationRelay.js";

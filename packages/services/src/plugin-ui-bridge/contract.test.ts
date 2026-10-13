@@ -71,6 +71,9 @@ describe("plugin-ui-bridge contract", () => {
       subscribeResource: async () => undefined,
       unsubscribeResource: async () => undefined,
       listSurfaces: async () => [],
+      // 本地 runtime 的中继事件恒为空；respond 无 pending 可结算。
+      onDynamicPluginSandboxRegisterRequest: () => () => ({ dispose() {} }),
+      respondPluginSandboxRegister: async () => undefined,
     };
     await expect(examplePrepareAndMount(bridge)).resolves.toEqual({
       src: "zcode-sandbox://shell-sb-tool:call_1/",
