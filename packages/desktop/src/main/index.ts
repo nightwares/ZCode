@@ -888,7 +888,13 @@ const armsUserIdentitySync = createArmsUserIdentitySync({
   deviceMid,
   setUser: (user) => armsRum.setConfig("user", user),
 });
-const webRemoteControlAppVersion = ZCODE_VERSION || app.getVersion();
+// 远控页（zcode.z.ai/remote/v4）按 QR 里的 app_version 校验已知发布版本：fork 版本号
+// （<upstream>-nightwares.N）不在官方版本表内，服务端直接 404（与 CDN manifest 404 同源）。
+// 远控链路一律上报上游基线版本；fork 完整版本号只用于部署与更新判定。
+const webRemoteControlAppVersion = (ZCODE_VERSION || app.getVersion()).replace(
+  /-nightwares\.\d+$/,
+  "",
+);
 const defaultZCodeEndpointUrls = buildZCodeEndpointUrls(DEFAULT_ZCODE_ENDPOINT_ORIGIN, {
   appVersion: webRemoteControlAppVersion,
 });
