@@ -8,6 +8,11 @@ const REQUIRED_SERVER_BUNDLE_MARKERS = [
   "__zcode_rpc_nested_uint8array_v1",
   "exportMarketplaceSourceArchive",
   "importMarketplaceSourceArchive",
+  // 旧 nightwares server 缺远端中继：browser-use（respondBrowserControl）与 MCP Apps
+  // （onDynamicPluginSandboxRegisterRequest）的请求会静默拿不到执行器（browserList 空、
+  // 沙箱 unavailable）。旧 bundle 必须被检出并重部署，而不是带病通过。
+  "respondBrowserControl",
+  "onDynamicPluginSandboxRegisterRequest",
 ];
 
 export type ServerBundleDeployDecision =
