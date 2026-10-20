@@ -137,12 +137,44 @@ async function execDocker(args: string[]): Promise<string> {
   });
 }
 
+/** 旧版 `docker ps --format "{{json .}}"` 的 JSON 行解析（兼容远端旧 CLI）。 */
+function parseDockerJsonContainerLine(line: string): DockerContainerInfo | null {
+  try {
+    const parsed = JSON.parse(line) as {
+      ID?: string;
+      Image?: string;
+      Names?: string;
+      State?: string;
+      Status?: string;
+    };
+    if (!parsed.ID || !parsed.Names) {
+      return null;
+    }
+    return {
+      id: parsed.ID,
+      image: parsed.Image ?? "",
+      name: parsed.Names,
+      state: parsed.State ?? "",
+      status: parsed.Status ?? "",
+    };
+  } catch {
+    return null;
+  }
+}
+
 export function parseDockerContainerList(rawOutput: string): DockerContainerInfo[] {
   return normalizeDockerOutput(rawOutput)
     .split("\n")
     .map((line) => line.trim())
     .filter((line) => line.length > 0)
     .flatMap((line) => {
+      // 兼容两种行格式：当前走 TSV（`--format "{{.ID}}\t..."`，不请求体积，避开
+      // daemon 逐容器计算 size 的分钟级开销）；旧版 `{{json .}}` 的 JSON 行仍按原样解析，
+      // 以免远端 docker CLI 版本差异导致列表整体为空。
+      if (line.startsWith("{")) {
+        const parsed = parseDockerJsonContainerLine(line);
+        return parsed ? [parsed] : [];
+      }
       const [id, name, image, state, ...statusParts] = line.split("\t");
       if (!id || !name) {
         return [];

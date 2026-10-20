@@ -39,7 +39,6 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu.js";
 import { useZCodeIntl } from "@/i18n/IntlProvider.js";
-import { isFileSystemRootPath } from "@/lib/path.js";
 import {
   formatRemoteWorkspaceDisplayLabel,
   formatRemoteWorkspaceHeaderHostLabel,
@@ -239,16 +238,6 @@ export function WorkspaceHeaderTitleSection({
     formatRemoteDeviceName(remoteTarget ?? directoryTarget ?? undefined, sourceServerDisplayName) ??
     intl.formatMessage({ id: "workspaceSidebar.remoteProject" });
   const workspaceContextLabel = workspaceDisplayLabel;
-=======
-  // 根目录 workspace 的标题已经就是主机标识（见 getWorkspaceDisplayName），再拼 "@ host" 会重复。
-  const showRemoteWorkspaceHostLabel = Boolean(
-    remoteWorkspaceHostLabel &&
-      workspaceDisplayLabel === projectName &&
-      !isFileSystemRootPath(workspaceAbsPath),
-  );
-  const workspaceContextLabel = showRemoteWorkspaceHostLabel
-    ? `${workspaceDisplayLabel} @ ${remoteWorkspaceHostLabel}`
-    : workspaceDisplayLabel;
   const workspaceBranchLabel = gitSummary.isRepository
     ? resolveGitBranchTriggerLabel({
         headRefType: gitSummary.headRefType,

@@ -1612,7 +1612,6 @@ export function createRemoteWorkspaceSessionManager(options: {
     reattachRemoteWorkspaceSessionsForWindow,
     hasRemoteWorkspaceSessionForTarget,
     resolveRemoteSessionHostForWorkspaceKey,
-    createBotRemoteWorkspaceRuntimePort,
     getRemoteConnectionStats,
     disposeRemoteWorkspaceSession,
     disposeRemoteWorkspaceSessionsForWindow,

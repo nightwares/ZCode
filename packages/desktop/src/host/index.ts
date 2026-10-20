@@ -2112,9 +2112,6 @@ async function createWindowRemoteConnectionHandle(params: {
     // MCP Apps 中继：远端 plugin UI 的沙箱登记经 stdio 到达这里，走本窗口既有
     // pluginSandboxRegistrationBridge（parentPort → main，ownerWebContentsId 归属校验在 main）。
     pluginSandboxRegistration: pluginSandboxRegistrationBridge,
-    // MCP Apps 中继：远端 plugin UI 的沙箱登记经 stdio 到达这里，走本窗口既有
-    // pluginSandboxRegistrationBridge（parentPort → main，ownerWebContentsId 归属校验在 main）。
-    pluginSandboxRegistration: pluginSandboxRegistrationBridge,
   });
   if (params.target.kind === "server") {
     projectSubscription = connection.services.broadcastService.onMessage((event) => {

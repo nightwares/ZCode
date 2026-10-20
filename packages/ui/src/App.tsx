@@ -631,14 +631,6 @@ export function App({
     },
     [handleOpenCodeViewers, isDesktop, webRemoteControlWorkspaceSwitcher, workspaceReadOnlyReason],
   );
-  const handleOpenTreemappingIfWritable = useCallback(
-    (...args: Parameters<typeof handleOpenTreemapping>) => {
-      if (!workspaceReadOnlyReason) {
-        handleOpenTreemapping(...args);
-      }
-    },
-    [handleOpenTreemapping, workspaceReadOnlyReason],
-  );
   const workspaceDisplayNameOverrides = useWorkspaceDisplayNameOverrides();
   const projectName = resolveWorkspaceDisplayName({
     workspacePath: workspaceAbsPath,
