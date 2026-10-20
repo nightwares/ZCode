@@ -1,4 +1,4 @@
-import { readFile, mkdir, rename } from "node:fs/promises";
+import { readFile, mkdir, rename, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { homedir } from "node:os";
 import type {
@@ -14,7 +14,12 @@ import {
 } from "@zcode/shared";
 import type { ISettingService, WorkspaceSettingsProjection } from "./setting.js";
 import { normalizeSettingsPatch } from "#src/setting/normalizeSettingsPatch.js";
-import { copyDataDirectory, getDataBaseDir, validateDataBaseDirTarget } from "../paths.js";
+import {
+  copyDataDirectory,
+  getAppConfigDir,
+  getDataBaseDir,
+  validateDataBaseDirTarget,
+} from "../paths.js";
 import { isEffectiveDevelopmentNodeEnv } from "../runtime-tools/nodeEnv.js";
 import { maybeThrowInjectedFsFault } from "../fs/fsFaultInjection.js";
 import { atomicWriteText, withAtomicFileLock } from "../fs/atomicFileUtils.js";
@@ -49,6 +54,28 @@ function resolveUserHomeDir() {
     process.env.HOME?.trim() ||
     process.env.USERPROFILE?.trim();
   return envHome && envHome.length > 0 ? envHome : homedir();
+}
+
+/**
+ * 设置文件所在目录。
+ *
+ * 显式 home 覆盖（ZCODE_DESKTOP_HOME_DIR）优先——独立 Dev 实例用它隔离整棵树。
+ * 其次是显式数据根（ZCODE_DATA_BASE_DIR）：设置文件必须与凭据、项目库同源，
+ * 否则同机上的另一个 ZCode 实例（不同版本、不同 schema）会用旧快照覆盖本实例的
+ * setting.json，把新版本才有的字段（sourceServers / connectionProfiles 等）整段抹掉，
+ * 表现为已连接的远端项目"找不到连接配置"（remote-project.profile-not-found）。
+ * 两者都没给时沿用真实 HOME（动态读取，与旧实现一致）。
+ */
+function resolveSettingsDir(): string {
+  const explicitHome = process.env.ZCODE_DESKTOP_HOME_DIR?.trim();
+  if (explicitHome) {
+    return join(explicitHome, ".zcode", "v2");
+  }
+  const explicitDataBaseDir = process.env.ZCODE_DATA_BASE_DIR?.trim();
+  if (explicitDataBaseDir) {
+    return join(explicitDataBaseDir, ".zcode", "v2");
+  }
+  return join(resolveUserHomeDir(), ".zcode", "v2");
 }
 
 function defaultSettings(): AppSettings {
@@ -107,11 +134,41 @@ interface ReadSettingsResult {
   needsMigrationPersist: boolean;
 }
 
+/**
+ * 设置文件迁移：数据根与旧 HOME 路径不同时，把旧 setting.json 搬到新位置。
+ *
+ * 设置文件此前固定写真实 HOME，同机运行的另一个 ZCode 实例会用它自己的 schema
+ * 覆写同一份文件，把本实例独有的字段整段抹掉。改跟随数据根后，实例之间不再共用
+ * 一个文件；这里把旧文件的内容一次性搬过去，避免升级后丢失账号选择、主题等状态。
+ */
+async function migrateLegacySettingsFile(settingsFile: string): Promise<void> {
+  const legacyFile = join(resolveUserHomeDir(), ".zcode", "v2", "setting.json");
+  if (legacyFile === settingsFile) return;
+  try {
+    await readFile(settingsFile, "utf-8");
+    return; // 新位置已有文件，不覆盖。
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "ENOENT") return;
+  }
+  try {
+    const legacy = await readFile(legacyFile, "utf-8");
+    await mkdir(dirname(settingsFile), { recursive: true });
+    await writeFile(settingsFile, legacy, "utf-8");
+    log("migrated settings file:", legacyFile, "->", settingsFile);
+  } catch (error) {
+    // 旧文件不存在是正常情况（全新数据根）；其它失败只记录，不阻断启动。
+    if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
+      log("settings file migration failed:", error);
+    }
+  }
+}
+
 async function readSettingsWithMetaAt(settingsFile: string): Promise<ReadSettingsResult> {
   try {
     // settingService.get() 会被 UI 和远程会话高频调用。
-    // 之前每次读取都把完整配置写入生产日志，导致日志暴涨且暴露路径/配置细节；普通读取只保留开发态 debug。
+    // 之前每次读取都把完整配置写入生产日志，导致日志暴涨并暴露路径/配置细节；普通读取只保留开发态 debug。
     debugLog("reading settings from:", settingsFile);
+    await migrateLegacySettingsFile(settingsFile);
     const raw = await readFile(settingsFile, "utf-8");
     let rawValue: unknown;
     try {
@@ -225,7 +282,7 @@ export function createSettingServiceWithMigrations(): {
 } {
   // 原因：每次 IO 动态读 HOME 会让旧异步投影写进后来实例的目录。
   // 在实例创建时取值，既支持测试/Host 注入，也让读取、文件锁与替换始终同源。
-  const settingsFile = join(resolveUserHomeDir(), ".zcode", "v2", "setting.json");
+  const settingsFile = join(resolveSettingsDir(), "setting.json");
   const getSettingsFile = () => settingsFile;
   const getSettingsDir = () => dirname(settingsFile);
   const readSettingsWithMeta = () => readSettingsWithMetaAt(settingsFile);

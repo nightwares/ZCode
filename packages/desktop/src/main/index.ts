@@ -61,6 +61,7 @@ import {
   buildRuntimeProcessEnvPatch,
   captureLoginShellEnvSnapshot,
   getConversationWorkspaceDir,
+  getAppConfigDir,
   getDataBaseDir,
   getZCodeDataRootDir,
   normalizeRuntimeProcessEnv,
@@ -570,7 +571,17 @@ async function runBrowserCommandOnView(params: {
 let currentDesktopZoomLevel = 0;
 let currentDesktopWindowSize: DesktopWindowSize | undefined;
 const preloadPath = join(import.meta.dirname, "../preload/index.cjs");
-const settingsFile = join(homedir(), ".zcode", "v2", "setting.json");
+// 启动期读取的设置文件候选：与 settings 服务同一套解析规则（显式 home > 显式数据根 >
+// 真实 HOME），并把旧 HOME 位置作为兜底。设置文件与凭据、项目库同源后，只看 HOME
+// 会读到同机另一个实例的设置，恢复错的工作区。
+const settingsFiles = [
+  ...(process.env.ZCODE_DESKTOP_HOME_DIR?.trim()
+    ? [join(process.env.ZCODE_DESKTOP_HOME_DIR.trim(), ".zcode", "v2", "setting.json")]
+    : process.env.ZCODE_DATA_BASE_DIR?.trim()
+      ? [join(process.env.ZCODE_DATA_BASE_DIR.trim(), ".zcode", "v2", "setting.json")]
+      : []),
+  join(homedir(), ".zcode", "v2", "setting.json"),
+];
 let activeAppShutdownPolicy = resolveAppShutdownPolicy("normal", process.platform);
 let activeAppShutdownKind: AppShutdownKind | null = null;
 const WINDOWS_AGENT_FORCE_KILL_TIMEOUT_MS = 2_000;
@@ -1090,7 +1101,7 @@ const primaryWindowCoordinator = createPrimaryWindowCoordinator({
     }
 
     return resolveStartupWindowBootstrap({
-      settingsFile,
+      settingsFiles,
       // dataBaseDir 可能在 bootstrap 设置阶段被覆盖，必须在真正解析启动工作区时再取值。
       conversationWorkspaceDir: getConversationWorkspaceDir(),
       logger,

@@ -12,24 +12,34 @@ interface StartupWorkspaceLogger {
   warn?: (...args: unknown[]) => void;
 }
 
-async function readStartupSettings(settingsFile: string, logger?: StartupWorkspaceLogger) {
-  try {
-    const raw = await readFile(settingsFile, "utf-8");
-    const parsed = JSON.parse(raw);
-    const result = appSettingsSchema.safeParse(parsed);
+/**
+ * 读取启动期设置。候选按序尝试：数据根优先，旧 HOME 位置兜底。
+ * 设置文件跟随数据根后，只看 HOME 会读到另一个实例的设置，导致恢复错的工作区。
+ */
+async function readStartupSettings(
+  settingsFiles: readonly string[],
+  logger?: StartupWorkspaceLogger,
+) {
+  for (const settingsFile of settingsFiles) {
+    try {
+      const raw = await readFile(settingsFile, "utf-8");
+      const parsed = JSON.parse(raw);
+      const result = appSettingsSchema.safeParse(parsed);
 
-    if (!result.success) {
-      logger?.warn?.(
-        "[startup-workspace] invalid settings file, falling back to default workspace:",
-        formatZodError(result.error),
-      );
-      return appSettingsSchema.parse({});
+      if (!result.success) {
+        logger?.warn?.(
+          "[startup-workspace] invalid settings file, falling back to default workspace:",
+          formatZodError(result.error),
+        );
+        return appSettingsSchema.parse({});
+      }
+
+      return result.data;
+    } catch {
+      // 文件不存在或半截 JSON：继续看下一个候选。
     }
-
-    return result.data;
-  } catch {
-    return appSettingsSchema.parse({});
   }
+  return appSettingsSchema.parse({});
 }
 
 export interface StartupWorkspaceWarmupTarget {
@@ -83,15 +93,15 @@ export function createOpenWorkspaceStartupBootstrap(workspacePath: string): Star
 }
 
 export async function resolveStartupWindowBootstrap({
-  settingsFile,
+  settingsFiles,
   conversationWorkspaceDir,
   logger,
 }: {
-  settingsFile: string;
+  settingsFiles: readonly string[];
   conversationWorkspaceDir: string;
   logger?: StartupWorkspaceLogger;
 }): Promise<StartupWindowBootstrap> {
-  const settings = await readStartupSettings(settingsFile, logger);
+  const settings = await readStartupSettings(settingsFiles, logger);
   const sessions =
     settings.lastActiveWorkspace === undefined
       ? (settings.lastWorkspaceSession ?? [])

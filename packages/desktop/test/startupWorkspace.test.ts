@@ -45,7 +45,7 @@ describe("startup workspace", () => {
     );
     expect(
       await resolveStartupWindowBootstrap({
-        settingsFile,
+        settingsFiles: [settingsFile],
         conversationWorkspaceDir: join(root, "default"),
       }),
     ).toEqual({
@@ -85,7 +85,7 @@ describe("startup workspace", () => {
 
     await expect(
       resolveStartupWindowBootstrap({
-        settingsFile,
+        settingsFiles: [settingsFile],
         conversationWorkspaceDir,
       }).then((bootstrap) => bootstrap.initialWorkspacePath),
     ).resolves.toBeUndefined();
@@ -123,7 +123,7 @@ describe("startup workspace", () => {
 
     await expect(
       resolveStartupWindowBootstrap({
-        settingsFile,
+        settingsFiles: [settingsFile],
         conversationWorkspaceDir,
       }),
     ).resolves.toEqual({
@@ -167,7 +167,7 @@ describe("startup workspace", () => {
 
     await expect(
       resolveStartupWindowBootstrap({
-        settingsFile,
+        settingsFiles: [settingsFile],
         conversationWorkspaceDir,
       }),
     ).resolves.toEqual({
@@ -210,7 +210,7 @@ describe("startup workspace", () => {
 
     await expect(
       resolveStartupWindowBootstrap({
-        settingsFile,
+        settingsFiles: [settingsFile],
         conversationWorkspaceDir,
       }),
     ).resolves.toEqual({
@@ -234,7 +234,7 @@ describe("startup workspace", () => {
     );
 
     await expect(
-      resolveStartupWindowBootstrap({ settingsFile, conversationWorkspaceDir }),
+      resolveStartupWindowBootstrap({ settingsFiles: [settingsFile], conversationWorkspaceDir }),
     ).resolves.toEqual({
       unavailableWorkspacePath: missingWorkspace,
       agentWarmupTargets: [{ workspacePath: missingWorkspace }],
@@ -259,7 +259,7 @@ describe("startup workspace", () => {
     );
 
     await expect(
-      resolveStartupWindowBootstrap({ settingsFile, conversationWorkspaceDir }),
+      resolveStartupWindowBootstrap({ settingsFiles: [settingsFile], conversationWorkspaceDir }),
     ).resolves.toEqual({
       unavailableWorkspacePath: workspaceFile,
       agentWarmupTargets: [{ workspacePath: workspaceFile }],
@@ -287,7 +287,7 @@ describe("startup workspace", () => {
 
       try {
         await expect(
-          resolveStartupWindowBootstrap({ settingsFile, conversationWorkspaceDir }),
+          resolveStartupWindowBootstrap({ settingsFiles: [settingsFile], conversationWorkspaceDir }),
         ).resolves.toEqual({
           unavailableWorkspacePath: inaccessibleWorkspace,
           agentWarmupTargets: [{ workspacePath: inaccessibleWorkspace }],
@@ -323,7 +323,7 @@ describe("startup workspace", () => {
         ),
       );
       await expect(
-        resolveStartupWindowBootstrap({ settingsFile, conversationWorkspaceDir }),
+        resolveStartupWindowBootstrap({ settingsFiles: [settingsFile], conversationWorkspaceDir }),
       ).resolves.toEqual({});
       expect((await stat(conversationWorkspaceDir)).isDirectory()).toBe(true);
       await expect(stat(remotePath)).rejects.toMatchObject({ code: "ENOENT" });
@@ -331,7 +331,7 @@ describe("startup workspace", () => {
       const canary = join(conversationWorkspaceDir, "keep.txt");
       await writeFile(canary, "existing data");
       await expect(
-        resolveStartupWindowBootstrap({ settingsFile, conversationWorkspaceDir }),
+        resolveStartupWindowBootstrap({ settingsFiles: [settingsFile], conversationWorkspaceDir }),
       ).resolves.toEqual({});
       expect(await readFile(canary, "utf8")).toBe("existing data");
     },
@@ -356,7 +356,7 @@ describe("startup workspace", () => {
       }),
     );
     await expect(
-      resolveStartupWindowBootstrap({ settingsFile, conversationWorkspaceDir }),
+      resolveStartupWindowBootstrap({ settingsFiles: [settingsFile], conversationWorkspaceDir }),
     ).rejects.toThrow();
     expect(await readFile(conversationWorkspaceDir, "utf8")).toBe("existing file");
   });
@@ -381,7 +381,7 @@ describe("startup workspace", () => {
     );
 
     await expect(
-      resolveStartupWindowBootstrap({ settingsFile, conversationWorkspaceDir }),
+      resolveStartupWindowBootstrap({ settingsFiles: [settingsFile], conversationWorkspaceDir }),
     ).resolves.toEqual({ agentWarmupTargets: [{ workspacePath: activeWorkspace }] });
     expect(existsSync(conversationWorkspaceDir)).toBe(false);
   });
@@ -404,7 +404,7 @@ describe("startup workspace", () => {
 
     await expect(
       resolveStartupWindowBootstrap({
-        settingsFile,
+        settingsFiles: [settingsFile],
         conversationWorkspaceDir,
       }).then((bootstrap) => bootstrap.initialWorkspacePath),
     ).resolves.toBe(conversationWorkspaceDir);
@@ -429,7 +429,7 @@ describe("startup workspace", () => {
 
     await expect(
       resolveStartupWindowBootstrap({
-        settingsFile,
+        settingsFiles: [settingsFile],
         conversationWorkspaceDir,
       }),
     ).resolves.toEqual({
