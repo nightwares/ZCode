@@ -334,6 +334,11 @@ export {
   settleCronRunTerminalOutcome,
   settleManualDispatchFailureBestEffort,
 } from "./session/automationRunLifecycle.js";
+// 远端 server（standalone-server / stdio）的 manual automation 派发器：
+// standalone 装配（createServerHostServices）与 stdio 装配共用，依赖方向合法
+// （services 内部实现，server 包只做转发再导出）。
+export { createManualAutomationDispatcher } from "./session/manualAutomationDispatcher.js";
+import { createManualAutomationDispatcher } from "./session/manualAutomationDispatcher.js";
 // 闲时任务与 automation 同库不同表；类型/常量全独立。
 export { OffPeakTaskRepo, OFF_PEAK_CLAIM_STALE_MS } from "./session/offPeakTaskRepo.js";
 // host 域终态回填 files_changed 复用现有 task diff 汇总。
@@ -3255,6 +3260,10 @@ export async function createServerHostServices(options: {
   sourceServerId: string;
   zcodeBuiltinProviderConfigFilePath: string;
   providerProvisioningTargetEnabled?: boolean;
+  /** 独立 Server 没有 Electron main：MCP Apps 沙箱登记经此中继交 desktop Host 执行。
+   * 缺省时函数内部自建中继（与 stdioServices 同款）；宿主已有桥接时可显式注入。 */
+  pluginSandboxRegistrationRelay?: PluginSandboxRegistrationRelay;
+  registerPluginSandbox?: (input: PluginSandboxRegisterInput) => Promise<PluginSandboxHandle>;
 }) {
   const projectStorageHostId = remoteHostIdFromWorkspaceIdentity(
     buildServerRemoteWorkspaceIdentity({ serverId: options.sourceServerId, workspacePath: "/" }),
@@ -3277,6 +3286,15 @@ export async function createServerHostServices(options: {
     },
   });
   const migrationFailedPathCount = await workspaceAliasRepo.getFailedPathCount();
+  // 远端 standalone server 的 manual automation 派发器（"立即运行"）：
+  // dispatcher 需要引用服务集合自身，而集合构造又要求先提供 dispatcher ——
+  // 与 stdioServices 相同的可变引用回填模式打破循环。
+  let dispatchManualRun: ReturnType<typeof createManualAutomationDispatcher> | null = null;
+  // MCP Apps：独立 Server 没有 Electron main，prepareSandbox 的登记请求必须经中继
+  // 转给 desktop Host 应答。与 stdioServices 同款：服务端自建中继，宿主可显式注入覆盖；
+  // 若两者皆无，plugin-ui-bridge 的 prepareSandbox 才会在依赖门上明确报 unavailable。
+  const pluginSandboxRegistrationRelay =
+    options.pluginSandboxRegistrationRelay ?? createPluginSandboxRegistrationRelay();
   const services = createLocalServices({
     zcodeBuiltinProviderConfigFilePath: options.zcodeBuiltinProviderConfigFilePath,
     providerProvisioningTargetEnabled: options.providerProvisioningTargetEnabled,
@@ -3284,7 +3302,16 @@ export async function createServerHostServices(options: {
     topicResourceRelayChannel: options.topicResourceRelayChannel,
     projectStorageHostId,
     sourceServerWorkspaceService,
+    onAutomationManualRunRequested: (params) => {
+      if (!dispatchManualRun) {
+        throw new Error("Automation immediate dispatcher is unavailable.");
+      }
+      return dispatchManualRun(params);
+    },
+    pluginSandboxRegistrationRelay,
+    ...(options.registerPluginSandbox ? { registerPluginSandbox: options.registerPluginSandbox } : {}),
   });
+  dispatchManualRun = createManualAutomationDispatcher(services);
   return { services, workspaceIdentityMapper, migrationFailedPathCount };
 }
 

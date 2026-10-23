@@ -19,6 +19,18 @@ vi.mock("@zcode/services/node", () => ({
   disposeServiceResourcesAndWait,
   getAppConfigDir: () => environmentConfigRoot,
   materializeZCodeBuiltinProviderConfig,
+  // automationScheduler 的默认 repo 依赖；wiring 测试不触达真实 sqlite。
+  AutomationRepo: class {
+    async claimDue() {
+      return [];
+    }
+    async releaseClaim() {}
+    close() {}
+  },
+  computeAutomationNextRunAt: () => null,
+  isOneShotAutomation: () => false,
+  isSessionMissingDispatchError: () => false,
+  settleCronRunTerminalOutcome: async () => undefined,
 }));
 vi.mock("../src/server-core/http.js", () => ({ createCoreHttpServer }));
 vi.mock("../src/server-core/ingressToken.js", () => ({ createIngressToken }));

@@ -14,6 +14,7 @@ import { createIngressToken } from "./ingressToken.js";
 import { installParentDisconnectHandler } from "./parentDisconnect.js";
 import { resolveCoreServerId } from "./serverIdentity.js";
 import { createTaskActivityTracker } from "./taskActivityTracker.js";
+import { createAutomationScheduler } from "./automationScheduler.js";
 import { resolveServerLayout } from "../runtime/paths.js";
 
 declare const __ZCODE_BUILTIN_PROVIDER_CONFIG_JSON__: string | undefined;
@@ -55,6 +56,12 @@ export async function runServerCore(generation: number): Promise<void> {
     topicResourceRelayChannel: (request) => topicResourcePeers.getChannel(request),
     });
   const taskActivityTracker = createTaskActivityTracker(services.getOptional(IZCodeAgentService));
+  // 定时任务：automations 行在本机 tasks-index 里，desktop scheduler 只轮询它自己那份文件；
+  // 独立 Server 7x24 常驻，必须自带调度循环，远端创建的 cron 才会被触发。
+  // （entry-http 位居 server 包，依赖方向不允许复用 server-cli 的循环；那是 ZCode Lite
+  // 长驻入口，与 devcontainer 的 server-core 不同路，暂不接线。）
+  const automationScheduler = createAutomationScheduler({ services });
+  automationScheduler.start();
   const ingressToken = await createIngressToken(layout);
   const http = await createCoreHttpServer(services, {
     serverId: sourceServerId,
@@ -137,6 +144,7 @@ export async function runServerCore(generation: number): Promise<void> {
     clearInterval(heartbeat);
     activitySubscription.dispose();
     taskActivityTracker.dispose();
+    await automationScheduler.dispose().catch(() => undefined);
     await http.close().catch(() => undefined);
     await disposeServiceResourcesAndWait(services).catch(() => undefined);
     await send({ type: "shutdown-ack" });
