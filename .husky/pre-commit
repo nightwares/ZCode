@@ -1,0 +1,38 @@
+#!/usr/bin/env sh
+# 防并发误扫：多个会话共用工作区时，`git add -A` 会把别人未提交的 WIP 扫进提交
+# （2026-10-23 事故：一次 add -A 把另一会话 10 个文件卷进了修复提交）。
+# 1) 永远打印暂存清单，让提交者看到全貌；
+# 2) 存在 .agent-claims/*.json 时，暂存文件必须落在某条 claim 内；
+# 3) 无 claim 时，大范围暂存（>12 个文件）视为疑似误扫，需显式放行。
+
+staged=$(git diff --cached --name-only)
+[ -z "$staged" ] && exit 0
+echo "—— staged files ——"
+echo "$staged"
+
+[ "$ZCODE_COMMIT_WIDE" = "1" ] && exit 0
+
+if ls .agent-claims/*.json >/dev/null 2>&1; then
+  sweep=0
+  while IFS= read -r f; do
+    grep -qrF "$f" .agent-claims/*.json || {
+      echo "pre-commit: '$f' 不在任何 .agent-claims claim 内（可能是其他会话的 WIP）" >&2
+      sweep=1
+    }
+  done <<EOF
+$staged
+EOF
+  if [ "$sweep" = "1" ]; then
+    echo "确实要提交这些文件请用: ZCODE_COMMIT_WIDE=1 git commit ..." >&2
+    exit 1
+  fi
+  exit 0
+fi
+
+count=$(printf '%s\n' "$staged" | wc -l)
+if [ "$count" -gt 12 ]; then
+  echo "pre-commit: 一次暂存 $count 个文件，疑似 add -A 误扫（可能卷入其他会话的 WIP）。" >&2
+  echo "确认无误请用: ZCODE_COMMIT_WIDE=1 git commit ..." >&2
+  exit 1
+fi
+exit 0

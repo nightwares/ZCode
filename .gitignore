@@ -75,3 +75,6 @@ packages/desktop/resources/macos-window-bounds/
 __pycache__/
 *.pyc
 .zcode-runtime
+
+# 并发会话的文件认领记录（配合 .husky/pre-commit 使用；不入库）
+.agent-claims/

@@ -5,6 +5,18 @@
 - 定位问题时，未明确要求修改代码就先调查原因。结合源码、日志和运行时证据，区分已确认原因与待验证假设。
 - 保留与任务无关的本地改动，不自行恢复已移除的模块或内部依赖。
 
+## 并发会话与 Git 暂存（硬性规则）
+
+本仓库常有多个 ZCode 实例/会话共用同一工作区。另一个会话的进行中改动会出现在
+`git status` 里；pre-push 要求工作区完全干净，绝不能用"顺手清理"来解锁推送。
+
+- 禁止 `git add -A`、`git add .`、`git add -u`。只暂存本次任务明确创建或修改的文件，逐个写路径。
+- 暂存前先 `git status --short`；出现不属于本任务的 modified/untracked 文件时：停下来向用户报告，
+  不暂存、不提交、不 stash、不 checkout、不删除。
+- 提交前核对 `git diff --cached --name-only` 与任务范围一致；不一致先 `git reset` 再逐路径重暂存。
+- 需要长期独立改动时，先建 worktree（`.worktrees/` 已在 .gitignore）再开工，不要和别的会话挤同一棵树；
+  每个会话用独立分支名（一个分支只能被一个 worktree 检出）。
+
 ## 命令与仓库结构
 
 开工前运行 `node scripts/check-workspace-freshness.mjs` 检查基线。Node 版本以 `mise.toml` 为准。
