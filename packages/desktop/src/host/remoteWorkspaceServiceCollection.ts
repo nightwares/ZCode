@@ -42,6 +42,9 @@ import {
   ITaskGroupService,
   IRemoteProjectService,
   IPromptAttachmentTransferService,
+  IPluginUiBridgeService,
+  IPluginUiSamplingService,
+  IPluginUiAppToolsService,
   type ServiceDescriptor,
   type IServiceAccessor,
 } from "@zcode/services";
@@ -116,6 +119,9 @@ export const REMOTE_WORKSPACE_RPC_REGISTRATIONS = [
   ["outputStyleService", IOutputStyleService],
   ["settingsSyncService", ISettingsSyncService],
   ["promptAttachmentTransferService", IPromptAttachmentTransferService],
+  ["pluginUiBridgeService", IPluginUiBridgeService],
+  ["pluginUiSamplingService", IPluginUiSamplingService],
+  ["pluginUiAppToolsService", IPluginUiAppToolsService],
 ] as const satisfies readonly [keyof IServiceAccessor, ServiceDescriptor<unknown>][];
 
 const conversationShareLog = createServiceLogger("conversation-share");
@@ -282,7 +288,14 @@ export function createServerRemoteWorkspaceServiceCollection(params: {
     .register(
       IPromptAttachmentTransferService,
       params.connectionServices.promptAttachmentTransferService,
-    );
+    )
+    // MCP Apps（远端 plugin UI）：renderer 只持有 attachment 代理，资源读取/工具调用/采样
+    // 必须经本集合转发到远端 server 的 plugin-ui 通道；漏注册时 Host 自己报
+    // "Unknown channel: plugin-ui-bridge"（同一类根因见上方 gen-ui / plugin-sync 修复）。
+    // 沙箱登记的动态事件中继在下方单独订阅（与转发注册解耦）。
+    .register(IPluginUiBridgeService, params.connectionServices.pluginUiBridgeService)
+    .register(IPluginUiSamplingService, params.connectionServices.pluginUiSamplingService)
+    .register(IPluginUiAppToolsService, params.connectionServices.pluginUiAppToolsService);
   // 新频道必须以握手能力为准；客户端总能生成 proxy，不能用对象存在性判断旧 Server 支持。
   if (params.virtualProjects) {
     if (

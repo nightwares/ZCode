@@ -40,6 +40,11 @@ export const REMOTE_WORKSPACE_RPC_CHANNELS = [
   "outputStyleService",
   "settingsSyncService",
   "promptAttachmentTransferService",
+  // MCP Apps 远端三通道：renderer 经 RemoteServiceAccess 代理调用，Host 必须转发，
+  // 否则 attachment ChannelServer 收到无人注册的请求 → "Unknown channel: plugin-ui-bridge"。
+  "pluginUiBridgeService",
+  "pluginUiSamplingService",
+  "pluginUiAppToolsService",
 ] as const satisfies readonly (keyof IServiceAccessor)[];
 
 /**

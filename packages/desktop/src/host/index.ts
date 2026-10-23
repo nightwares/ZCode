@@ -2084,6 +2084,9 @@ async function createWindowRemoteConnectionHandle(params: {
       // Defense-in-depth：请求里的 remoteSessionId 应当是本窗口已登记的 logical session。
       isPlausibleRemoteSessionId: (remoteSessionId) =>
         windowRemoteConnectionRegistry.getSession(remoteSessionId) !== null,
+      // MCP Apps 中继必须与首连一致：换代重建漏掉它会让重连后的远端 widget
+      // 沙箱登记无人应答（prepareSandbox 挂到 30s 超时）。
+      pluginSandboxRegistration: pluginSandboxRegistrationBridge,
       });
       refreshResourceTelemetry();
       lastNotifiedRecoveryAttempt = 0;
