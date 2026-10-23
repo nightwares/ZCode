@@ -872,8 +872,14 @@ const webRemoteControlSharedHostAttachments = createWebRemoteControlSharedHostAt
 });
 const deviceMid = ensureDesktopDeviceMidSync();
 // 帮助配置是公开读取，不能复用下面附带账号鉴权的灰度响应缓存。
+// /api/v1/client/configs 与远控页同源：官方端点按已知发布版本表校验 app_version，
+// fork 版本号（<upstream>-nightwares.N）不在表内会被拒——统一上报上游基线版本。
+const clientConfigAppVersion = (ZCODE_VERSION || app.getVersion()).replace(
+  /-nightwares\.\d+$/,
+  "",
+);
 const readHelpConfig = createDesktopHelpConfigReader({
-  appVersion: ZCODE_VERSION || app.getVersion(),
+  appVersion: clientConfigAppVersion,
   deviceMid,
   getClientLanguage: () => currentApplicationLocale,
   resolveEndpointOrigin: resolveCurrentZCodeEndpointOrigin,
@@ -881,7 +887,7 @@ const readHelpConfig = createDesktopHelpConfigReader({
 // 同一个 /api/v1/client/configs fetcher 供两个灰度 rollout 共用（请求参数与鉴权完全一致，
 // 各自独立缓存/去重，服务端按 data.configs.<key> 区分功能）。
 const electronClientConfigsFetcher = createElectronDesktopContextPromptConfigFetcher({
-  appVersion: ZCODE_VERSION || app.getVersion(),
+  appVersion: clientConfigAppVersion,
   deviceMid,
   getClientLanguage: () => currentApplicationLocale,
   resolveEndpointOrigin: resolveCurrentZCodeEndpointOrigin,
@@ -917,10 +923,7 @@ const armsUserIdentitySync = createArmsUserIdentitySync({
 // 远控页（zcode.z.ai/remote/v4）按 QR 里的 app_version 校验已知发布版本：fork 版本号
 // （<upstream>-nightwares.N）不在官方版本表内，服务端直接 404（与 CDN manifest 404 同源）。
 // 远控链路一律上报上游基线版本；fork 完整版本号只用于部署与更新判定。
-const webRemoteControlAppVersion = (ZCODE_VERSION || app.getVersion()).replace(
-  /-nightwares\.\d+$/,
-  "",
-);
+const webRemoteControlAppVersion = clientConfigAppVersion;
 const defaultZCodeEndpointUrls = buildZCodeEndpointUrls(DEFAULT_ZCODE_ENDPOINT_ORIGIN, {
   appVersion: webRemoteControlAppVersion,
 });
