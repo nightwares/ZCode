@@ -75,6 +75,8 @@ afterAll(() => {
 });
 
 interface RunOptions {
+  /** 无人值守 automation turn：yolo 下跳过运行确认门（见 checkAlwaysAsk 的放行分支）。 */
+  automationTurn?: boolean;
   broker?: PermissionBrokerPort;
   dynamicWorkflowRunPort?: DynamicWorkflowRunPort;
   entry?: ToolEntry;
@@ -188,7 +190,10 @@ async function run(options: RunOptions): Promise<RunOutcome> {
       },
       name: "CreateWorkflow",
     },
-    { traceContext },
+    {
+      ...(options.automationTurn ? { automationTurn: true } : {}),
+      traceContext,
+    },
   );
 
   return {
@@ -281,6 +286,39 @@ describe("CreateWorkflow run confirmation", () => {
     const output = outcome.result.output as CreateWorkflowOutput;
     expect(output.ok).toBe(false);
     expect(output.diagnostics.length).toBeGreaterThan(0);
+  });
+
+  it("无人值守 automation turn + yolo 跳过运行确认门，整夜运行不再等点击", async () => {
+    const script = cleanScript("automation-yolo");
+    analyzedScripts.length = 0;
+
+    const outcome = await run({
+      automationTurn: true,
+      mode: "yolo",
+      name: "create-workflow-automation-yolo",
+      script,
+    });
+
+    expect(outcome.permissionRequested).toHaveLength(0);
+    expect(outcome.brokerRequests).toHaveLength(0);
+    expect(outcome.result.success).toBe(true);
+    const output = outcome.result.output as CreateWorkflowOutput;
+    expect(output.ok).toBe(true);
+    // gate 前分析仍然要跑一次（放行不等于跳过分析）。
+    expect(analyzedScripts.filter((entry) => entry === script)).toHaveLength(1);
+  });
+
+  it("无人值守但非 yolo（build）仍然要确认：放行只跟随 yolo 授权，不跟随无人事实", async () => {
+    const outcome = await run({
+      automationTurn: true,
+      mode: "build",
+      name: "create-workflow-automation-build",
+      script: cleanScript("automation-build"),
+    });
+
+    expect(outcome.permissionRequested).toHaveLength(1);
+    expect(outcome.brokerRequests).toHaveLength(1);
+    expect(outcome.result.success).toBe(true);
   });
 
   it("PreToolUse hook 的 allow 不能抹掉这道确认", async () => {

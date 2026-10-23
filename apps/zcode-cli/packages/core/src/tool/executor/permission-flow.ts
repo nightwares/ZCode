@@ -52,6 +52,7 @@ export async function resolveToolPermission(
   signal?: AbortSignal,
   telemetry?: ToolExecutionSpanWriter,
   preparedContext?: ToolRuntimePermissionCapabilityContext,
+  automationTurn?: boolean,
 ): Promise<PermissionFlowResult> {
   const context = {
     ...resolveRuntimePermissionContext(deps),
@@ -101,6 +102,8 @@ export async function resolveToolPermission(
         prePlanMode: deps.sessionModePort?.getPrePlanMode(),
         // 草稿预批与实际工具输入共用已准备的 cwd，不能在合并 Guarded 时漏传。
         workingDirectory: context.workingDirectory,
+        // 无人值守 automation turn 的 alwaysAsk 门放行依据（见 checkAlwaysAsk）。
+        automationTurn,
       },
       resolveRuntimePermissionCapability(entry, executionInput, context),
       projectRules,
@@ -215,6 +218,7 @@ export async function resolveToolPermission(
           deps,
         );
         const recheck = recheckPermissionHookModifiedInput({
+          automationTurn,
           context,
           deps,
           entry,

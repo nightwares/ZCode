@@ -44,6 +44,13 @@ export interface PermissionContext {
    * 可选：拿不到工作目录的调用方照常按其余规则判定，不会因此少一层确认。
    */
   workingDirectory?: string;
+  /**
+   * 本轮由 automation（cron / 手动派发的 automationId turn）驱动、无人值守。
+   * alwaysAsk 门（workflow 运行确认一族）在落 ask 之前参考它：yolo 下无人值守的
+   * 运行若停在确认门上，整夜的工作都会等一个人工点击——按 yolo 已接受的执行
+   * 边界直接放行。显式 deny 与会话规则仍然优先于这个放行。
+   */
+  automationTurn?: boolean;
 }
 
 export interface PermissionToolCapability {
@@ -416,6 +423,18 @@ export class PermissionService {
         capability,
         "rule.session.workflowOwner",
         `Tool ${context.toolName} amends a run this session started`,
+      );
+    }
+    // 无人值守 automation turn + yolo：运行确认门不再 ask。跑整夜的 automation
+    // 卡在这道门上等于整夜空转；操作员选 yolo + 定时派发时已经接受了同样的
+    // 执行边界（workflow 子 agent 也跑在 yolo 里）。放在 deny / 会话规则之后，
+    // 显式拒绝与免确认规则仍优先。
+    if (context.automationTurn && context.mode === "yolo") {
+      return this.allow(
+        context,
+        capability,
+        "mode.yolo.automation",
+        "Unattended automation turn in yolo mode bypasses the run-confirmation gate",
       );
     }
     return this.ask(

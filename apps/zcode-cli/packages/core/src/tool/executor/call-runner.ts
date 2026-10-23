@@ -407,6 +407,7 @@ async function executeToolCallImpl(
           ? {}
           : { workingDirectory: guardedWorkingDirectory }),
       },
+      options?.automationTurn,
     );
     if (!permissionResult.allowed) {
       const result = appendPreToolAdditionalContextsToErrorResult(

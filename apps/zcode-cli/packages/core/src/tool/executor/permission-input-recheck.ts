@@ -22,6 +22,7 @@ export function recheckPermissionHookModifiedInput(input: {
   projectRules: PermissionRuleset | null;
   toolCall: ExecutableToolCall;
   /** 与首次判权同一份上下文（mode、bashShellSelection、cwd 快照），由 executor 构造并透传。 */
+  automationTurn?: boolean;
   context: ToolRuntimePermissionCapabilityContext & {
     workingDirectory: string;
     workspaceRoot: string;
@@ -32,6 +33,7 @@ export function recheckPermissionHookModifiedInput(input: {
   const { context: runtimePermissionContext } = input;
   const { workingDirectory, workspaceRoot } = runtimePermissionContext;
   const permissionContext: PermissionContext = {
+    automationTurn: input.automationTurn,
     input: input.modifiedInput,
     mode: input.mode,
     prePlanMode: input.deps.sessionModePort?.getPrePlanMode(),
