@@ -84,6 +84,7 @@ import {
   TEST_ZCODE_ENDPOINT_ORIGIN,
   ZCODE_VERSION,
   buildZCodeEndpointUrls,
+  normalizeUpstreamAppVersion,
   resolveWebRemoteControlRelayWsUrl,
   resolveZCodeEndpointOrigin,
   shouldEnableE2ETestBridge,
@@ -874,10 +875,7 @@ const deviceMid = ensureDesktopDeviceMidSync();
 // 帮助配置是公开读取，不能复用下面附带账号鉴权的灰度响应缓存。
 // /api/v1/client/configs 与远控页同源：官方端点按已知发布版本表校验 app_version，
 // fork 版本号（<upstream>-nightwares.N）不在表内会被拒——统一上报上游基线版本。
-const clientConfigAppVersion = (ZCODE_VERSION || app.getVersion()).replace(
-  /-nightwares\.\d+$/,
-  "",
-);
+const clientConfigAppVersion = normalizeUpstreamAppVersion(ZCODE_VERSION || app.getVersion());
 const readHelpConfig = createDesktopHelpConfigReader({
   appVersion: clientConfigAppVersion,
   deviceMid,

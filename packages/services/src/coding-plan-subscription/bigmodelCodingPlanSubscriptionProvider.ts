@@ -75,6 +75,7 @@ import {
   resolveZaiBusinessBaseUrl,
   ZAI_PROVIDER_ID,
   ZCODE_VERSION,
+  normalizeUpstreamAppVersion,
   DEFAULT_ZCODE_MODEL_CONTEXT_BUDGET_STRATEGY,
   createDynamicWorkflowClientConfig,
   normalizeDynamicWorkflowMode,
@@ -277,7 +278,8 @@ export class BigModelCodingPlanSubscriptionProvider {
   async getManualClaimPlanPreviews(): Promise<ManualClaimPlanPreviewSnapshot> {
     const token = (await this.credentialService.load(ZCODE_JWT_TOKEN_KEY))?.trim();
     const url = new URL(buildRuntimeZCodeApiUrl(process.env, "/api/v1/zcode-plan/billing/preview"));
-    url.searchParams.set("app_version", ZCODE_VERSION);
+    // billing 系列接口按已知发布版本表校验 app_version；fork 版本号不在表内会被拒。
+    url.searchParams.set("app_version", normalizeUpstreamAppVersion(ZCODE_VERSION));
     url.searchParams.set("platform", resolveClientPlatformKey());
     const payload = await readCodingPlanApiJson<RemoteEnvelope<ManualClaimPlanPreviewPayload>>(
       this.apiClient,
@@ -350,7 +352,8 @@ export class BigModelCodingPlanSubscriptionProvider {
           Authorization: `Bearer ${token}`,
           "Content-Type": "application/json",
           ...requestVerificationClaimHeaders(request),
-          "X-ZCode-App-Version": ZCODE_VERSION,
+          // 领取接口按已知发布版本表校验版本头；fork 版本号统一上报上游基线。
+          "X-ZCode-App-Version": normalizeUpstreamAppVersion(ZCODE_VERSION),
           "X-Platform": resolveClientPlatformKey(),
         },
         body: JSON.stringify({ plan_id: request.planId }),
@@ -808,8 +811,9 @@ export class BigModelCodingPlanSubscriptionProvider {
 
     // client/configs 和其他 ZCode 平台接口必须共享运行时 endpoint；
     // E2E/测试环境会通过 ZCODE_BASE_URL 指向本地 mock，硬编码线上域名会让套餐状态不可控。
+    // 官方端点按已知发布版本表校验 app_version，fork 版本号统一上报上游基线。
     const url = resolveCodingPlanClientConfigUrl(process.env);
-    url.searchParams.set("app_version", ZCODE_VERSION);
+    url.searchParams.set("app_version", normalizeUpstreamAppVersion(ZCODE_VERSION));
     url.searchParams.set("platform", resolveClientPlatformKey());
     // StartPlanCard 和套餐列表都来自同一个 client/configs。
     // 同屏分别读取 preview/products 时必须合并请求，避免未登录设置页重复打远端配置。

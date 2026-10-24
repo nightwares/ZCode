@@ -11,3 +11,11 @@ export const ZCODE_COMMIT: string =
   typeof __ZCODE_COMMIT__ !== "undefined" ? __ZCODE_COMMIT__ : "unknown";
 export const ZCODE_BUILD_TIME: string =
   typeof __ZCODE_BUILD_TIME__ !== "undefined" ? __ZCODE_BUILD_TIME__ : "unknown";
+
+// zcode.z.ai 按官方发布版本表校验 app_version（query 参数与 X-ZCode-App-Version 头）：
+// 远控页对未知版本直接 404，client/configs 灰度与套餐接口按版本判定能力。
+// fork 版本号（<upstream>-nightwares.N）不在表内，所有面向官方端点的版本信号
+// 统一上报上游基线版本；fork 完整版本号只用于部署与更新判定。
+export function normalizeUpstreamAppVersion(version: string): string {
+  return version.replace(/-nightwares\.\d+$/, "");
+}
