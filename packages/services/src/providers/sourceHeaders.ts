@@ -4,10 +4,9 @@ import { join } from "node:path";
 import {
   buildZCodeSourceHeadersFromContext,
   normalizeZCodeSourceHeaderValue,
-  normalizeUpstreamAppVersion,
   ZCODE_ENV,
   ZCODE_SOURCE_HEADERS,
-  ZCODE_VERSION,
+  UPSTREAM_APP_VERSION,
 } from "@zcode/shared";
 import { getAppConfigDir } from "../paths.js";
 
@@ -71,7 +70,7 @@ export function buildZCodeSourceHeaders(
   // X-ZCode-App-Version 与 User-Agent 会被官方端点按发布版本表校验；
   // fork 版本号（<upstream>-nightwares.N）默认上报上游基线，显式传入值由调用方负责。
   const appVersion = normalizePrintableHeaderValue(
-    options.appVersion ?? normalizeUpstreamAppVersion(ZCODE_VERSION),
+    options.appVersion ?? UPSTREAM_APP_VERSION,
   );
   const releaseChannel = normalizePrintableHeaderValue(options.releaseChannel ?? ZCODE_ENV);
   const clientLanguage =

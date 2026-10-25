@@ -1,9 +1,8 @@
 import {
   DEFAULT_ZCODE_ENDPOINT_ORIGIN,
-  ZCODE_VERSION,
   buildZCodeEndpointUrls,
   getForceUpdateMinimalVersionFromConfig,
-  normalizeUpstreamAppVersion,
+  UPSTREAM_APP_VERSION,
   resolveForceUpdateRequirement,
   type ForceUpdateRequirement,
   type Locale,
@@ -50,7 +49,7 @@ export function resolveForceUpdateClientConfigUrl(
     `${buildZCodeEndpointUrls(endpointOrigin).origin}${ZCODE_CLIENT_CONFIG_API_PATH}`,
   );
   // 官方端点按已知发布版本表校验 app_version；fork 版本号统一上报上游基线。
-  url.searchParams.set("app_version", normalizeUpstreamAppVersion(ZCODE_VERSION));
+  url.searchParams.set("app_version", UPSTREAM_APP_VERSION);
   url.searchParams.set("platform", `${process.platform}-${process.arch}`);
   return url.toString();
 }
@@ -158,7 +157,7 @@ export async function resolveDesktopForceUpdateRequirement(options: {
     resolveForceUpdateRequirement({
       // fork 后缀（-nightwares.N）在 semver 里是 prerelease，排在基线版本之前；
       // 官方把最低版本设为 fork 的上游基线时会误判 fork 必须强更。强更判定按基线比较。
-      currentVersion: normalizeUpstreamAppVersion(ZCODE_VERSION),
+      currentVersion: UPSTREAM_APP_VERSION,
       forceUpdate: {
         minimalVersion:
           getForceUpdateMinimalVersionFromClientConfig(config) ??

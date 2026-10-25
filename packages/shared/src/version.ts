@@ -16,6 +16,13 @@ export const ZCODE_BUILD_TIME: string =
 // 远控页对未知版本直接 404，client/configs 灰度与套餐接口按版本判定能力。
 // fork 版本号（<upstream>-nightwares.N）不在表内，所有面向官方端点的版本信号
 // 统一上报上游基线版本；fork 完整版本号只用于部署与更新判定。
+//
+// 用法约定（由 packages/shared/test/versionSignals.test.ts 守卫）：
+// - 面向官方端点：一律使用 UPSTREAM_APP_VERSION 常量，禁止 ZCODE_VERSION 裸用；
+// - 部署/更新/遥测/本地缓存：继续使用 ZCODE_VERSION（完整 fork 版本）。
 export function normalizeUpstreamAppVersion(version: string): string {
   return version.replace(/-nightwares\.\d+$/, "");
 }
+
+/** 上报官方端点时使用的版本（fork 构建即上游基线，官方构建原样）。 */
+export const UPSTREAM_APP_VERSION: string = normalizeUpstreamAppVersion(ZCODE_VERSION);

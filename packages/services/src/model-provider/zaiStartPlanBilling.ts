@@ -2,8 +2,7 @@ import type { ApiClient } from "@zcode/shared";
 import {
   buildRuntimeZCodeEndpointUrls,
   normalizeOfficialGlmModelId,
-  normalizeUpstreamAppVersion,
-  ZCODE_VERSION,
+  UPSTREAM_APP_VERSION,
 } from "@zcode/shared";
 import { readApiJson } from "../providers/api/apiJson.js";
 
@@ -67,7 +66,7 @@ export function buildZaiStartPlanBalanceUrl(): string {
   // 开发环境也不能固定 3.0.0，否则本地验证会绕过当前 App 版本的后端策略。
   // fork（<upstream>-nightwares.N）与官方端点交互时上报上游基线：能力语义与官方
   // 同版本一致，又不会因版本不在官方发布表内被拒。
-  url.searchParams.set("app_version", normalizeUpstreamAppVersion(ZCODE_VERSION));
+  url.searchParams.set("app_version", UPSTREAM_APP_VERSION);
   return url.toString();
 }
 

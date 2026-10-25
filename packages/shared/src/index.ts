@@ -40,6 +40,7 @@ export {
   ZCODE_COMMIT,
   ZCODE_BUILD_TIME,
   normalizeUpstreamAppVersion,
+  UPSTREAM_APP_VERSION,
 } from "./version.js";
 export type { HelloMessage, HelloAckMessage } from "./handshake.js";
 export type { ArmsRumEnv, ZCodeEnv, ZCodeProductFlavor } from "./env.js";
