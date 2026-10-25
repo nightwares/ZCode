@@ -5,6 +5,7 @@ import type {
 } from "@zcode/adapters/model";
 import type { ProviderEndpointRoutingPort } from "@zcode/contracts";
 import {
+  normalizeUpstreamAppVersion,
   resolveRuntimeZCodeEnv,
   resolveRuntimeZCodeEndpointOrigin,
   ZCODE_APP_VERSION_ENV,
@@ -72,7 +73,11 @@ function resolveAppVersionForHeaders(
   env: EnvRecord,
   options: Pick<RuntimeExecutionConfigOptions, "appVersion">,
 ): string | undefined {
-  return normalizePrintableHeaderValue(env[ZCODE_APP_VERSION_ENV] ?? options.appVersion);
+  // X-ZCode-App-Version 按官方发布版本表校验；环境变量携带的是完整 fork 版本，
+  // 进头之前统一剥离 fork 后缀（遥测读取同一环境变量不受影响）。
+  return normalizePrintableHeaderValue(
+    normalizeUpstreamAppVersion(env[ZCODE_APP_VERSION_ENV] ?? options.appVersion ?? ""),
+  );
 }
 
 function detectDefaultProviderSourceTitle(): ModelProviderSourceTitle {

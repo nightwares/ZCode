@@ -655,6 +655,7 @@ import {
   zcodeAccountAccessSchema,
   zcodeProviderAccountAccessSchema,
   ZCODE_VERSION,
+  UPSTREAM_APP_VERSION,
   ZCODE_ENV,
   buildRuntimeZCodeApiUrl,
 } from "@zcode/shared";
@@ -1546,12 +1547,14 @@ export function createLocalServices(options: {
           providerConfigLog.info(undefined, "ZCode Built-in CDN 配置已更新", event);
         else providerConfigLog.debug(undefined, "ZCode Built-in 刷新检查", event);
       },
+      // builtin 配置从官方 client/configs 系接口下载，app_version 按发布版本表校验；
+      // fork 统一上报上游基线（本地缓存路径仍用完整 ZCODE_VERSION）。
       fetchRelease: (endpointOrigin, signal) =>
         fetchZCodeBuiltinRemoteRelease({
           apiClient,
           endpointOrigin,
           signal,
-          appVersion: ZCODE_VERSION,
+          appVersion: UPSTREAM_APP_VERSION,
           platform: clientConfigPlatform,
         }),
     },
@@ -2681,7 +2684,8 @@ export function createLocalServices(options: {
         getToken: () => credentialService.load("zcodejwttoken"),
         getDeviceMid: () => options?.agentTelemetry?.getDeviceMid?.(),
         baseUrl: buildRuntimeZCodeApiUrl(process.env, "/"),
-        appVersion: ZCODE_VERSION,
+        // marketing/touch 的 X-ZCode-App-Version 按官方发布版本表校验；上报上游基线。
+        appVersion: UPSTREAM_APP_VERSION,
         onSnapshot: (snapshot) => marketingAssets.accept(snapshot),
       }),
     )
@@ -2751,7 +2755,8 @@ export function createLocalServices(options: {
         apiClient,
         resolveRequestContext: async () => ({
           endpointOrigin: await resolveCurrentZCodeEndpointOrigin(),
-          appVersion: ZCODE_VERSION,
+          // /api/v1/client/configs 按官方发布版本表校验 app_version；上报上游基线。
+          appVersion: UPSTREAM_APP_VERSION,
           platform: `${process.platform}-${process.arch}`,
         }),
       }),

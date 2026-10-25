@@ -2,7 +2,7 @@ import { z } from "zod";
 import { projectTokenSuccessCodeSchema } from "./project-access-token-response.js";
 import { API_KEY_USAGE_SCENE } from "./api-key-usage-scene.js";
 import { ProjectAccessTokenCache, ProjectAccessTokenError } from "./project-access-token.js";
-import { ZCODE_VERSION } from "./version.js";
+import { UPSTREAM_APP_VERSION } from "./version.js";
 import { isCredentialDecryptError } from "./oauth.js";
 
 const DEFAULT_ORGANIZATION_NAME = "默认机构";
@@ -212,7 +212,8 @@ export class ProjectAccessTokenClient {
               headers,
               body: JSON.stringify({
                 clientType: "zcode",
-                clientVersion: ZCODE_VERSION,
+                // 官方端点按发布版本表识别 clientVersion；fork 统一上报上游基线。
+                clientVersion: UPSTREAM_APP_VERSION,
               }),
             },
           );

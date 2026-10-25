@@ -8,7 +8,7 @@ import {
 import {
   isBuiltinModelProviderId,
   resolveRuntimeZCodeEndpointOrigin,
-  ZCODE_VERSION,
+  UPSTREAM_APP_VERSION,
 } from "@zcode/shared";
 import { dirname, join } from "node:path";
 import {
@@ -75,7 +75,8 @@ export async function startProcessProviderRegistryRuntime(
               downloadZCodeBuiltinRelease({
                 endpointOrigin,
                 signal,
-                appVersion: ZCODE_VERSION,
+                // builtin 配置下载的 app_version 按官方发布版本表校验；上报上游基线。
+                appVersion: UPSTREAM_APP_VERSION,
                 platform: resolveZCodeBuiltinClientPlatform(),
                 request: options.standalone?.request ?? globalThis.fetch,
               }),

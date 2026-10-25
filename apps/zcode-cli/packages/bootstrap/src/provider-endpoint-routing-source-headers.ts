@@ -3,6 +3,7 @@ import { arch as readOsArch, homedir, release as readOsRelease } from "node:os";
 import { join } from "node:path";
 import {
   buildZCodeSourceHeadersFromContext,
+  normalizeUpstreamAppVersion,
   resolveRuntimeZCodeEndpointOrigin,
   resolveRuntimeZCodeEnv,
   ZCODE_APP_VERSION_ENV,
@@ -24,7 +25,10 @@ export async function createProviderEndpointRoutingSourceHeaders(
   const env = options.env ?? process.env;
   const deviceMid = await readExistingDeviceMid(resolveTelemetryStateFile(env));
   return buildZCodeSourceHeadersFromContext({
-    appVersion: env[ZCODE_APP_VERSION_ENV] ?? options.appVersion,
+    // X-ZCode-App-Version 按官方发布版本表校验；环境变量是完整 fork 版本，进头前剥离后缀。
+    appVersion: normalizeUpstreamAppVersion(
+      env[ZCODE_APP_VERSION_ENV] ?? options.appVersion ?? "",
+    ),
     arch: readOsArch(),
     clientLanguage: resolveClientLanguage(),
     clientTimezone: resolveClientTimezone(),
