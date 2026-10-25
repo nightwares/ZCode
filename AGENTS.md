@@ -17,6 +17,19 @@
 - 需要长期独立改动时，先建 worktree（`.worktrees/` 已在 .gitignore）再开工，不要和别的会话挤同一棵树；
   每个会话用独立分支名（一个分支只能被一个 worktree 检出）。
 
+## 版本信号（硬性规则）
+
+zcode.z.ai 按官方发布版本表校验 app_version / X-ZCode-App-Version；fork 版本号
+（`<upstream>-nightwares.N`）不在表内会被拒答（QR 404、灰度拒答、Start Plan 不可用均源于此）。
+契约测试 `packages/shared/test/versionSignals.test.ts` 索引了全部版本信号用法并强制分类：
+
+- 面向官方端点的版本信号一律用 `UPSTREAM_APP_VERSION`（shared/version.ts），禁止 `ZCODE_VERSION` 裸用；
+  经 option/env 传值的入口在取值处包 `normalizeUpstreamAppVersion()`。
+- 部署/更新/协议判定（server bundle 等值、mock-cdn 路径、semver、DPAPI 绑定）与遥测、
+  本地缓存键、展示，保留完整 `ZCODE_VERSION`。
+- 新增/改动任何 `ZCODE_VERSION`、`ZCODE_APP_VERSION`、`app.getVersion()`、`"app_version"`、
+  `X-ZCode-App-Version` 用法，必须同步更新该测试的 INDEX，否则测试失败即阻塞提交。
+
 ## 命令与仓库结构
 
 开工前运行 `node scripts/check-workspace-freshness.mjs` 检查基线。Node 版本以 `mise.toml` 为准。
